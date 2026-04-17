@@ -49,12 +49,15 @@ Pick tasks from the plan's todo list in this order. Ship each milestone in its o
 2. `backend/app/sheets/` client with service account auth, admin-configurable column mapping, in-process TTL cache, "refresh now" invalidation, fallback to `sheet_snapshot` on failure.
 3. Tests: unit for column mapping, integration that spins Postgres via the CI service and validates the fallback path with a mocked Sheets client.
 
-### M4: auth + authz
+### M4: auth + authz + audit
 
-1. `backend/app/auth/`: OAuth2 login flow with `hd=symphony.is` enforced server-side, allowlist check, server-side session, CSRF on state-changing routes.
-2. `backend/app/authz/`: role enum + dependencies + single-source hub scoping filter.
-3. `backend/app/audit/`: one helper per event type, writes in the same transaction as the mutation.
-4. Tests: unit for role checks, integration for "unauthorized domain rejected", "un-allowlisted user rejected", "viewer cannot see other hub", E2E Playwright for the login redirect shape (mocked OAuth server).
+Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `user_hub_scopes`, and `audit_log` landed in the M3 follow-up migration `20260417_0002`. Do not add new columns to these without a new migration.
+
+1. `backend/app/auth/`: OAuth2 login flow with `hd=symphony.is` enforced server-side, allowlist check, server-side session backed by the `sessions` table (4h idle via `last_seen_at`, 24h absolute via `expires_at`, revoke via `revoked_at`), CSRF on state-changing routes.
+2. `backend/app/authz/`: role dependencies + single-source hub scoping filter (no second implementation).
+3. `backend/app/audit/`: one helper per event type, writes in the **same transaction** as the mutation.
+4. **Apply [backend/grants.sql](backend/grants.sql) in your dev and test databases.** It sets up the three-role grants model from [docs/adr/0010-audit-log-grants.md](docs/adr/0010-audit-log-grants.md): app role gets `INSERT`+`SELECT` on `audit_log` only; erasure role gets `UPDATE` on PII columns for NFR-PRIV-5; sweep role gets `DELETE` for retention. TC-I-AUD-3 asserts this from the test fixture, so load `grants.sql` in your pytest DB setup. Production application of this SQL is an M7 deploy-runbook concern, not M4.
+5. Tests: unit for role checks, integration for "unauthorized domain rejected", "un-allowlisted user rejected", "viewer cannot see other hub", session idle + absolute timeout, offboarding invalidation. E2E Playwright for login redirect shape (mocked OIDC server).
 
 ### M5: report endpoint + UI port
 
@@ -72,7 +75,7 @@ Pick tasks from the plan's todo list in this order. Ship each milestone in its o
 ### M7: security hardening + deployment decision
 
 1. HTTPS-only, HSTS, CSP, rate limiting, session rotation, dependency scans required to merge.
-2. Write `docs/deployment-options.md` comparing Cloud Run vs VPN-gated infra vs self-hosted VM. Pick one as ADR 0010.
+2. Write `docs/deployment-options.md` comparing Cloud Run vs VPN-gated infra vs self-hosted VM. Pick one as ADR 0011 (0010 is already taken by audit-log grants).
 3. Ship production: Dockerfiles, secrets, DB, domain, SSO, smoke tests, runbook.
 
 ## Test expectations
@@ -125,3 +128,11 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    text. When M5 enumerates all audit event types (config edit, comment CRUD, user
    CRUD), convert `target` to JSONB with a typed diff structure. This needs a small
    design pass on the event schema. Do in M5.
+
+4. **Clear `esbuild` GHSA-67mh-4wv8-2f99 (5 moderate npm audit findings)** — all five
+   findings chain from `esbuild <=0.24.2` via `vite`, `@vitest/mocker`, `vitest`, and
+   `vite-node`. Dev-server-only vulnerability: no production runtime impact (nginx
+   serves the built bundle). CI passes because the threshold is `high`. Fix by bumping
+   `vite` to a patched `^5.x` or moving to Vite 7 in a dedicated dep PR. Do NOT run
+   `npm audit fix --force` — it proposes Vite 8 which is a breaking jump. Captured
+   from `npm audit` run on 2026-04-17 after `make install` on `main`.
