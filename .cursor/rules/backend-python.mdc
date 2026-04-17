@@ -1,0 +1,44 @@
+---
+description: Backend Python conventions for FastAPI + SQLAlchemy + Alembic
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend Python
+
+## Types and models
+
+- Every request/response model is a Pydantic `BaseModel` with explicit fields. No `dict[str, Any]` at boundaries.
+- Every DB entity is a typed SQLAlchemy model. No raw SQL except in migrations.
+- Run `mypy --strict` clean. `Any` requires a comment explaining why.
+
+```python
+class ReportPeriodResponse(BaseModel):
+    month: str
+    total_hires: int
+    hubs: list[HubBreakdown]
+```
+
+## Auth and authz
+
+- Use the `require_user` and `require_role(Role.ADMIN)` dependencies. Never roll your own check.
+- Hub scoping lives in one place: `backend/app/authz/hub_scope.py`. Report aggregation consumes the filter from there and nowhere else.
+- Never log the session cookie, OAuth tokens, or service account JSON.
+
+## Logging
+
+- Use the shared logger from `backend/app/logging.py`. One JSON line per event.
+- Include `request_id` and `actor` (if known). Redact PII.
+- Never use `print()`.
+
+## Migrations
+
+- Alembic migrations are forward-only. Do not edit a migration that has shipped.
+- Every migration has a rollback path documented in the docstring even if we do not run it.
+- Data migrations in separate files from schema migrations.
+
+## Tests
+
+- Unit tests for aggregation, column mapping, and authz live under `backend/tests/unit/`.
+- Integration tests (Sheets client, auth flow, audit writes) live under `backend/tests/integration/`.
+- Each new endpoint ships with at least one happy-path and one unauthorized-path test.

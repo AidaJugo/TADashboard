@@ -1,0 +1,35 @@
+---
+description: Rules for touching auth, authz, session, and audit code paths
+globs: backend/app/{auth,authz,audit}/**/*.py
+alwaysApply: false
+---
+
+# Auth, authz, and audit
+
+This is the highest-risk area in the repo. Read [ADR 0004](../../docs/adr/0004-google-workspace-sso.md), [ADR 0009](../../docs/adr/0009-data-classification.md), and the relevant PRD sections before editing.
+
+## Hard rules
+
+- Every mutation of user role, hub scope, or config writes an audit entry in the **same transaction**. If the audit write fails, the mutation fails.
+- Hub scope filter is applied in one place only (`backend/app/authz/hub_scope.py`) and consumed by the report pipeline. No second implementation.
+- `hd=symphony.is` is verified client-side **and** server-side. Treat client-side as advisory.
+- Session cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, signed with the server session key.
+- Session timeouts: 4 hours idle, 24 hours absolute. Do not change without PRD update.
+
+## Do not
+
+- Do not add an "admin bypass" query parameter.
+- Do not log OAuth tokens, session cookies, or the service account JSON.
+- Do not delete or mutate audit log entries. The table has no `UPDATE` or `DELETE` grants.
+- Do not add a second login method.
+
+## Required tests for any change here
+
+- Unauthorized domain is rejected (integration).
+- Un-allowlisted symphony.is user is rejected (integration).
+- A viewer cannot read data for a hub they are not scoped to (integration + E2E).
+- Every mutation here has a paired audit log assertion in its test.
+
+## Pairing
+
+Security-sensitive PRs require review from a second CODEOWNER.

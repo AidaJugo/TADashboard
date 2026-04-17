@@ -1,0 +1,29 @@
+---
+description: Test conventions and required coverage
+globs: '**/{tests,e2e,__tests__}/**/*.{py,ts,tsx}'
+alwaysApply: false
+---
+
+# Testing
+
+Strategy is in [docs/testing.md](../../docs/testing.md). This rule captures the day-to-day conventions.
+
+## Pyramid
+
+- Unit: fast, no network, no DB. 80%+ of tests.
+- Integration: real DB via `pytest-postgresql` or a disposable container. Mocked Sheets API.
+- E2E: Playwright against a running stack. Reserved for security-critical flows (login, scope, role-gated actions, audit).
+
+## Conventions
+
+- One behaviour per test. The test name is the behaviour: `test_viewer_cannot_see_unauthorized_hub`.
+- Arrange / Act / Assert, with a blank line between each.
+- No snapshot tests for anything auth- or data-related. Assertions are explicit.
+- Fixtures are synthetic. Never use real employee names or real salaries in fixtures.
+
+## Required for every feature PR
+
+- Unit tests for every new pure function.
+- An integration test for every new endpoint (at least happy-path + one unauthorized case).
+- An E2E test only if the feature is in the security-critical list in [docs/testing.md](../../docs/testing.md).
+- Tests are named after the PRD requirement they cover when applicable: `test_fr_report_5_last_known_good_snapshot`.

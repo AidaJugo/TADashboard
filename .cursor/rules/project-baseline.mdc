@@ -1,0 +1,34 @@
+---
+description: Project-wide rules for the Symphony TA Hiring Report Platform
+alwaysApply: true
+---
+
+# Symphony TA Hiring Report: project baseline
+
+Read [AGENTS.md](../../AGENTS.md) and [docs/prd.md](../../docs/prd.md) before non-trivial changes.
+
+## Non-negotiables
+
+- Data is **Strictly Confidential**. See [ADR 0009](../../docs/adr/0009-data-classification.md).
+- Auth: Google Workspace SSO, `symphony.is` only, server-side allowlist. No other login path.
+- Per-hub scoping is enforced **server-side before aggregation**. Never filter client-side.
+- No secrets in the repo, ever. Read from env vars.
+- `legacy/` is frozen. Do not edit files there.
+
+## Stack
+
+- Backend: Python 3.12 + FastAPI + Alembic + `uv` + `pytest`.
+- Frontend: React + Vite + TypeScript + Chart.js + Playwright.
+- DB: Postgres 16.
+
+## When adding a dependency
+
+- Pin versions. Update the lockfile.
+- Run `pip-audit` / `npm audit` locally and attach output if anything non-trivial appears.
+- Adding a new runtime language, framework, or anything in the auth/crypto path requires an ADR.
+
+## Commit and PR
+
+- Conventional commits: `feat(scope): summary`.
+- Every PR updates tests and docs that it affects. Use the PR template.
+- Security-sensitive PRs (auth, authz, audit, migrations, secret handling) need a second reviewer.

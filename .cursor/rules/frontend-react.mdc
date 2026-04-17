@@ -1,0 +1,50 @@
+---
+description: Frontend React + TypeScript conventions
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend React + TypeScript
+
+UI and copy rules live in [.cursor/skills/symphony-design/SKILL.md](../skills/symphony-design/SKILL.md). Load it before any component or string change.
+
+## Components
+
+- Functional components only. No class components.
+- Props are explicit, typed, and defaulted at the destructuring site.
+- Colocate component, styles, and tests: `KpiCard.tsx`, `KpiCard.module.css`, `KpiCard.test.tsx`.
+- Extract shared logic into hooks under `frontend/src/hooks/`.
+
+```tsx
+type KpiCardProps = {
+  label: string;
+  value: number;
+  trend?: "up" | "down" | "flat";
+};
+
+export function KpiCard({ label, value, trend = "flat" }: KpiCardProps) {
+  return <article>{/* ... */}</article>;
+}
+```
+
+## Data fetching
+
+- One API client in `frontend/src/api/client.ts`. Every call goes through it.
+- Use React Query (TanStack Query) for server state. No ad-hoc `useEffect` + `fetch`.
+- Handle loading, error, and empty states. Copy lives in the design skill.
+
+## Design tokens
+
+- Import from `frontend/src/theme/tokens.ts`. Never hardcode colours, fonts, or spacing.
+- Text is only `black` or `white`. See design skill.
+
+## Accessibility
+
+- Every interactive element has an accessible name.
+- Charts include a textual summary for screen readers.
+- Keyboard-reachable, focus-visible.
+
+## Tests
+
+- Unit tests for pure components with Vitest + React Testing Library.
+- E2E tests for the critical security flows live under `frontend/e2e/` and run in Playwright.

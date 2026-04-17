@@ -1,0 +1,32 @@
+---
+description: Alembic migration conventions
+globs: backend/alembic/**/*.py
+alwaysApply: false
+---
+
+# Alembic migrations
+
+## Rules
+
+- Forward-only. Never edit or delete a migration that has been merged to `main`.
+- Schema changes and data backfills live in separate migrations. Easier to review and revert.
+- Every migration has a docstring that states: what it does, why, and how to roll back manually if production forces it.
+- `downgrade()` must be implemented or explicitly raise `NotImplementedError("forward-only")` with a comment.
+
+## Naming
+
+- Descriptive, slug-case: `20260417_1830_add_user_hub_scopes.py`.
+- Revision IDs are whatever Alembic generates. Do not rename them after commit.
+
+## Safety
+
+- Use `op.batch_alter_table` for column type changes (Postgres tolerates most, but keep the idiom).
+- Never drop a column in the same release that stops writing to it. Two-step: stop writing, deploy, then drop in the next release.
+- Add an index in a migration, not in application code.
+
+## Checklist for every migration PR
+
+- [ ] Migration runs cleanly against the current HEAD.
+- [ ] `alembic downgrade -1 && alembic upgrade head` runs cleanly locally.
+- [ ] Tests added or updated if the schema change is observable.
+- [ ] PRD updated if the change alters a stored field called out in the PRD.

@@ -1,0 +1,25 @@
+# Code owners for the Symphony TA Hiring Report Platform.
+#
+# Every PR needs at least one owner approval. Security-sensitive areas require two.
+# Replace GitHub handles once the users are provisioned.
+
+# Default owner.
+*                               @aida-jugo-krstulovic
+
+# Security-sensitive areas: two reviewers required (configure in branch protection).
+/backend/app/auth/              @aida-jugo-krstulovic @enis-kudo
+/backend/app/authz/              @aida-jugo-krstulovic @enis-kudo
+/backend/app/audit/              @aida-jugo-krstulovic @enis-kudo
+/backend/alembic/versions/      @aida-jugo-krstulovic @enis-kudo
+
+# Documents of record: Aida approves changes here.
+/docs/prd.md                    @aida-jugo-krstulovic
+/docs/adr/                      @aida-jugo-krstulovic
+
+# Design system.
+/.cursor/skills/symphony-design/ @aida-jugo-krstulovic
+
+# CI and repo-wide guardrails.
+/.github/                       @aida-jugo-krstulovic
+/AGENTS.md                      @aida-jugo-krstulovic
+/CODEOWNERS                     @aida-jugo-krstulovic

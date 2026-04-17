@@ -1,0 +1,25 @@
+title = "gitleaks config for the TA Hiring Report Platform"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known safe paths"
+paths = [
+  '''legacy/.*''',
+  '''docs/.*''',
+  '''\.env\.example$''',
+  '''docker-compose\.ya?ml$''',
+]
+
+[[rules]]
+id = "google-service-account-json"
+description = "Google Cloud service account JSON key"
+regex = '''"type":\s*"service_account"'''
+tags = ["key", "google"]
+
+[[rules]]
+id = "google-oauth-client-secret"
+description = "Google OAuth client secret"
+regex = '''GOCSPX-[A-Za-z0-9_\-]{20,}'''
+tags = ["key", "google"]

@@ -1,0 +1,70 @@
+/* Poppins is self-hosted. See .cursor/skills/symphony-design/SKILL.md. */
+/* TODO: drop poppins-medium.woff2, poppins-semibold.woff2, poppins-bold.woff2
+   into ../assets/fonts/ to complete the set (500, 600, 700 weights). */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-semibold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-bold.woff2") format("woff2");
+}
+
+:root {
+  --color-primary: #6c69ff;
+  --color-red: #fe7475;
+  --color-yellow: #ffbe3d;
+  --color-light-grey: #f4f5fb;
+  --color-black: #000000;
+  --color-white: #ffffff;
+  --color-navy: #222453;
+  --color-light-blue: #91afea;
+  --color-blue-grey: #9fabc0;
+  --color-peach: #f9dfc4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--color-black);
+  background: var(--color-light-grey);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
