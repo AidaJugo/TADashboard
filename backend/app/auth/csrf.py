@@ -36,12 +36,12 @@ The dependency is a no-op for safe methods (GET, HEAD, OPTIONS).
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import TYPE_CHECKING, Final
 
 from fastapi import HTTPException, Request, status
 
+from app.auth.cookies import _secure_cookie
 from app.config import get_settings
 
 if TYPE_CHECKING:
@@ -72,7 +72,6 @@ def set_csrf_cookie(response: Response) -> str:
     """
     settings = get_settings()
     token = _generate_token()
-    secure = os.environ.get("SESSION_COOKIE_INSECURE") != "1"
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
         value=token,
@@ -80,7 +79,7 @@ def set_csrf_cookie(response: Response) -> str:
         # Deliberately HttpOnly=False: JavaScript in the SPA must read
         # this cookie and echo it as the X-CSRF-Token header.
         httponly=False,
-        secure=secure,
+        secure=_secure_cookie(),
         samesite="lax",
         path="/",
     )
@@ -88,8 +87,18 @@ def set_csrf_cookie(response: Response) -> str:
 
 
 def clear_csrf_cookie(response: Response) -> None:
-    """Drop the CSRF cookie (logout, paired with ``clear_session_cookie``)."""
-    response.delete_cookie(key=CSRF_COOKIE_NAME, path="/")
+    """Drop the CSRF cookie (logout, paired with ``clear_session_cookie``).
+
+    Mirror the set-time attributes (Safari delete-attr-mismatch hygiene,
+    same reason as ``clear_session_cookie``).
+    """
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
+        path="/",
+        secure=_secure_cookie(),
+        samesite="lax",
+        httponly=True,
+    )
 
 
 async def require_csrf(request: Request) -> None:

@@ -45,6 +45,11 @@ class InvalidCookieError(ValueError):
     """Raised when the signed cookie value fails verification."""
 
 
+def _secure_cookie() -> bool:
+    """True unless explicitly disabled for local HTTP dev via SESSION_COOKIE_INSECURE=1."""
+    return os.environ.get("SESSION_COOKIE_INSECURE", "0") != "1"
+
+
 def _serializer() -> URLSafeTimedSerializer:
     settings = get_settings()
     return URLSafeTimedSerializer(
@@ -89,18 +94,29 @@ def set_session_cookie(response: Response, session_id: uuid.UUID) -> None:
     set this env var.
     """
     settings = get_settings()
-    secure = os.environ.get("SESSION_COOKIE_INSECURE") != "1"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=sign_session_id(session_id),
         max_age=settings.session_absolute_timeout_minutes * 60,
         httponly=True,
-        secure=secure,
+        secure=_secure_cookie(),
         samesite="lax",
         path="/",
     )
 
 
 def clear_session_cookie(response: Response) -> None:
-    """Remove the session cookie from ``response`` (logout)."""
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    """Remove the session cookie from ``response`` (logout).
+
+    Mirror the set-time attributes so Safari (which sometimes refuses to
+    clear a cookie when delete-time attrs disagree with set-time attrs)
+    drops it reliably.  Server-side revocation is the source of truth;
+    this is just hygiene.
+    """
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=_secure_cookie(),
+        samesite="lax",
+        httponly=True,
+    )

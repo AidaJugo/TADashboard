@@ -14,7 +14,6 @@ can override the network-facing half with a scripted fake.
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Annotated
 
@@ -30,6 +29,7 @@ from app.audit.writer import write_audit
 from app.auth.cookies import (
     SESSION_COOKIE_NAME,
     InvalidCookieError,
+    _secure_cookie,
     clear_session_cookie,
     set_session_cookie,
     verify_cookie,
@@ -265,13 +265,12 @@ async def logout(
 
 
 def _set_state_cookie(response: Response, state: str) -> None:
-    secure = os.environ.get("SESSION_COOKIE_INSECURE") != "1"
     response.set_cookie(
         key=_OAUTH_STATE_COOKIE,
         value=state,
         max_age=_OAUTH_STATE_MAX_AGE_SECONDS,
         httponly=True,
-        secure=secure,
+        secure=_secure_cookie(),
         samesite="lax",
         path="/",
     )
