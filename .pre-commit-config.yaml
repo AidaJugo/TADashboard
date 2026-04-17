@@ -20,7 +20,11 @@ repos:
         files: ^backend/
 
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    # Match the version uv resolves from `black>=24.10` in
+    # backend/pyproject.toml (currently 26.3.1).  Black 24 and Black 26
+    # disagree on PEP 695 generic signatures so CI and pre-commit must
+    # agree on a major.  See HANDOFF.md Post-M4 backlog #6.
+    rev: 26.3.1
     hooks:
       - id: black
         files: ^backend/

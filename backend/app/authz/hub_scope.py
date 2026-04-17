@@ -56,9 +56,11 @@ def filter_hub_names(hubs: Iterable[str], allowed_hubs: list[str]) -> list[str]:
     return [h for h in hubs if h in allowed_set]
 
 
-def filter_by_hub[
-    T
-](items: Iterable[T], key: Callable[[T], str], allowed_hubs: list[str],) -> list[T]:
+def filter_by_hub[T](
+    items: Iterable[T],
+    key: Callable[[T], str],
+    allowed_hubs: list[str],
+) -> list[T]:
     """Filter arbitrary items where ``key(item)`` returns the item's hub.
 
     Usage example (M5 report aggregation)::

@@ -158,3 +158,16 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    - Re-enable `TC-I-AUTH-9` and add unit tests for the probe mechanism.
    - Update `docs/testing.md` section 7: NFR-COMP-2 gets the automatic path added
      alongside the existing M4 allowlist + admin-revoke path.
+
+6. **Investigate ruff-vs-black config drift on PEP 695 generics** — `ruff format`
+   and `black` disagree on how to wrap generic function signatures of the form
+   `def filter_by_hub[T](...)` (see `backend/app/authz/hub_scope.py`). Ruff
+   produces `def filter_by_hub[\n    T\n](args, ...)` with a trailing comma,
+   black collapses to the conventional `def name[T](\n    args,\n)` style.
+   This is a formatter-vs-formatter fight, not a `ruff check` lint rule, so
+   there is nothing to add to `[tool.ruff.lint]` ignores. Resolution options
+   for a follow-up: pin matching versions, drop one of the two formatters
+   (likely black since ruff is canonical here), or wait for upstream to align
+   on PEP 695. Today we work around it by running black before pushing
+   anything that touches generic signatures. Captured 2026-04-17 while
+   pushing the M4 nit-fix series.
