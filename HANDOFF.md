@@ -171,3 +171,18 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    on PEP 695. Today we work around it by running black before pushing
    anything that touches generic signatures. Captured 2026-04-17 while
    pushing the M4 nit-fix series.
+
+7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache` fails in CI, passes locally** —
+   `backend/tests/integration/test_sheets_client.py::test_tc_i_sh_6_manual_refresh_bypasses_cache`
+   asserts `mock_build.call_count == 2` after `client.invalidate()` followed by
+   a second `get_rows()`; CI sees 1. Failing run:
+   https://github.com/AidaJugo/TADashboard/actions/runs/24580615250. Main has
+   been red since the M4 nit-fix series landed (commit `166c848`), but the
+   failure is M3 sheets code, not M4. Likely causes, in order of probability:
+   (a) `SheetCache.invalidate()` not actually dropping the cached entry on the
+   CI Python/library combo; (b) per-test mock state leaking between the two
+   `get_rows()` calls; (c) ordering-sensitive flake. Repro steps: run
+   `uv run pytest tests/integration/test_sheets_client.py -k tc_i_sh_6
+   --count=10 -p no:randomly` locally (from `backend/`) before assuming
+   environment. Owner: whoever picks up M5 sheets work first. Captured
+   2026-04-17 during the M4 review.
