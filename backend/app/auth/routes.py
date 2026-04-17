@@ -277,7 +277,15 @@ def _set_state_cookie(response: Response, state: str) -> None:
 
 
 def _clear_state_cookie(response: Response) -> None:
-    response.delete_cookie(key=_OAUTH_STATE_COOKIE, path="/")
+    # Mirror set-time attrs (Safari delete-attr-mismatch hygiene), same
+    # reason as ``clear_session_cookie`` / ``clear_csrf_cookie``.
+    response.delete_cookie(
+        key=_OAUTH_STATE_COOKIE,
+        path="/",
+        secure=_secure_cookie(),
+        samesite="lax",
+        httponly=True,
+    )
 
 
 __all__ = ["router"]
