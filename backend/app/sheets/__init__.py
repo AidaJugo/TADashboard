@@ -1,10 +1,27 @@
-"""Google Sheets client (see ADR 0003).
+"""Sheets layer public API.
 
-TODO: implement
-- Service-account-authenticated client using gspread.
-- load_rows(): fetches rows using the admin-configured column mapping
-  (see PRD FR-CONFIG-2).
-- Schema validation: unknown required columns raise a typed error,
-  the app falls back to the last-known-good snapshot stored in Postgres.
-- Short in-process TTL cache, invalidated on explicit "refresh now".
+Re-exports the key types and functions so callers use ``from app.sheets import ...``.
 """
+
+from app.sheets.cache import SheetCache
+from app.sheets.client import SheetsClient, get_sheets_client, reset_sheets_client
+from app.sheets.column_mapping import ColumnMappingError, validate_column_mapping
+from app.sheets.models import (
+    REQUIRED_LOGICAL_COLUMNS,
+    ColumnMappingConfig,
+    HireRow,
+    SheetFetchResult,
+)
+
+__all__ = [
+    "ColumnMappingConfig",
+    "ColumnMappingError",
+    "HireRow",
+    "REQUIRED_LOGICAL_COLUMNS",
+    "SheetCache",
+    "SheetFetchResult",
+    "SheetsClient",
+    "get_sheets_client",
+    "reset_sheets_client",
+    "validate_column_mapping",
+]
