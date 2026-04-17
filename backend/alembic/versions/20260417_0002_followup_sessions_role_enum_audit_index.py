@@ -16,9 +16,24 @@ What:
 Why: four blockers from the M3 review (B1, B3 schema side, N1-N4) needed before M4
 can build auth on top of a complete, correct schema.
 
+M4/PR-1 amendment (2026-04-17): the original version of step 2 ran
+`ALTER TABLE users ALTER COLUMN role TYPE user_role USING role::user_role`
+without first dropping the VARCHAR default seeded by migration
+`20260417_0001` (`server_default='viewer'`). Postgres rejects the alter
+because the text default cannot be cast implicitly to the new enum type
+(`DatatypeMismatch: default for column "role" cannot be cast automatically
+to type user_role`). Because DDL is transactional, the whole migration
+rolled back, meaning 0002 never successfully applied anywhere — no
+sessions table, no user_role type, nothing. This edit fixes step 2 by
+dropping the default, converting the type, and re-setting the default
+against the new enum. Forward-only is preserved in spirit because no
+deployed database had 0002 applied.
+
 Rollback: forward-only (see .cursor/rules/migrations.mdc). Manual steps if needed:
   - DROP TABLE sessions;
+  - ALTER TABLE users ALTER COLUMN role DROP DEFAULT;
   - ALTER TABLE users ALTER COLUMN role TYPE varchar(20) USING role::text;
+  - ALTER TABLE users ALTER COLUMN role SET DEFAULT 'viewer';
   - DROP TYPE user_role;
   - DROP INDEX ix_audit_log_action_created_at;
   - ALTER TABLE sheet_snapshot DROP CONSTRAINT ck_sheet_snapshot_single_row;
@@ -45,10 +60,15 @@ _USER_ROLE_ENUM = postgresql.ENUM("admin", "editor", "viewer", name="user_role",
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # 1. Create the `user_role` ENUM type, then alter users.role
+    # 1. Create the `user_role` ENUM type, then alter users.role.
+    #    The VARCHAR default must be dropped before the ALTER because
+    #    Postgres cannot implicitly cast the text default to the new
+    #    enum type (see module docstring, M4/PR-1 amendment).
     # ------------------------------------------------------------------
     op.execute("CREATE TYPE user_role AS ENUM ('admin', 'editor', 'viewer')")
+    op.execute("ALTER TABLE users ALTER COLUMN role DROP DEFAULT")
     op.execute("ALTER TABLE users ALTER COLUMN role TYPE user_role USING role::user_role")
+    op.execute("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'viewer'::user_role")
 
     # ------------------------------------------------------------------
     # 2. Add `sessions` table

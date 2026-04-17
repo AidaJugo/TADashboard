@@ -13,8 +13,11 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.admin.routes import router as admin_router
+from app.auth.routes import router as auth_router
 from app.config import get_settings
 from app.logging import configure_logging, get_logger
+from app.report.routes import router as report_router
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -58,6 +61,10 @@ def create_app() -> FastAPI:
     @app.get("/readyz", tags=["health"])
     def readyz() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+    app.include_router(report_router)
 
     log.info("app_started", extra={"app_env": settings.app_env})
     return app
