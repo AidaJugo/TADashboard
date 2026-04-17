@@ -13,12 +13,10 @@ repos:
       - id: mixed-line-ending
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.11
     hooks:
       - id: ruff
         args: [--fix]
-        files: ^backend/
-      - id: ruff-format
         files: ^backend/
 
   - repo: https://github.com/psf/black
