@@ -104,3 +104,24 @@ See [docs/testing.md](docs/testing.md). For every feature PR:
 - Unclear requirements: Aida Jugo Krstulovic.
 - TA domain questions: Enis Kudo.
 - Anything that touches auth, audit, or secrets: pair with Aida before merging.
+
+## Post-M4 backlog
+
+These items were identified during the M3 review and deferred. None are blockers for
+M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
+
+1. **Refactor `SheetCache` to expose `seed_last_good(result)`** — replace the direct
+   private-attribute write `self._cache._last_good = ...` in
+   `backend/app/sheets/client.py` (`_prime_cache_from_snapshot`) with a clean public
+   method on `SheetCache`. Pure refactor, no behaviour change. Bundle with any other
+   sheets-cache work.
+
+2. **`asyncio.to_thread` around the gspread call in `_fetch_live`** — gspread is
+   synchronous; wrapping it in `asyncio.to_thread` prevents it from blocking the
+   event loop under concurrent requests. Fine for 10 users today, but worth doing
+   before load increases. File: `backend/app/sheets/client.py`, `_fetch_live` method.
+
+3. **`audit_log.target` as structured JSONB** — the current `target` column is free
+   text. When M5 enumerates all audit event types (config edit, comment CRUD, user
+   CRUD), convert `target` to JSONB with a typed diff structure. This needs a small
+   design pass on the event schema. Do in M5.

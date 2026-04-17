@@ -3,6 +3,7 @@
 Tables:
   users              — allowlisted Symphony employees with an assigned role.
   user_hub_scopes    — hubs each user may view (empty rows = all hubs).
+  sessions           — server-side session records for auth timeout enforcement.
   config_kv          — admin-editable runtime configuration (spreadsheet ID, tab,
                        retention windows).
   column_mappings    — admin-editable mapping: logical column names → Sheet headers.
@@ -14,10 +15,13 @@ Tables:
   sheet_snapshot     — last-successful raw JSON from Google Sheets (FR-REPORT-2).
 
 All tables use UUIDs as primary keys except config_kv / column_mappings (string PKs)
-and sheet_snapshot (single-row sentinel with integer PK).
+and sheet_snapshot (single-row sentinel with integer PK, CHECK (id = 1)).
+
+users.role uses a native Postgres ENUM (user_role) so garbage values are rejected at
+the DB layer (FR-AUTHZ-1).
 
 The audit log has no updated_at column: the DB role used by the app must not have
-UPDATE or DELETE grants on audit_log (TC-I-AUD-3).
+UPDATE or DELETE grants on audit_log (TC-I-AUD-3, ADR 0010).
 """
 
 from __future__ import annotations
@@ -25,11 +29,14 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime  # noqa: TC003  # SQLAlchemy resolves Mapped[datetime] at runtime
+from typing import Any
 
 from sqlalchemy import (
     UUID,
     Boolean,
+    CheckConstraint,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -38,6 +45,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -56,6 +64,11 @@ class RoleEnum(enum.StrEnum):
     viewer = "viewer"
 
 
+#: Postgres-native ENUM type for users.role. Shared between the model column
+#: definition and the migration so the type name is consistent.
+USER_ROLE_ENUM = Enum(RoleEnum, name="user_role")
+
+
 # ---------------------------------------------------------------------------
 # Users
 # ---------------------------------------------------------------------------
@@ -66,6 +79,7 @@ class User(Base):
 
     A Google SSO login only succeeds if the email is present here (FR-AUTH-3).
     Role is enforced server-side on every request (FR-AUTHZ-1).
+    The DB-native ENUM type (user_role) rejects unknown role strings at write time.
     """
 
     __tablename__ = "users"
@@ -74,7 +88,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[RoleEnum] = mapped_column(
-        String(20),
+        USER_ROLE_ENUM,
         nullable=False,
         default=RoleEnum.viewer,
     )
@@ -88,6 +102,9 @@ class User(Base):
 
     hub_scopes: Mapped[list[UserHubScope]] = relationship(
         "UserHubScope", back_populates="user", cascade="all, delete-orphan"
+    )
+    sessions: Mapped[list[Session]] = relationship(
+        "Session", back_populates="user", cascade="all, delete-orphan"
     )
     audit_entries: Mapped[list[AuditLog]] = relationship(
         "AuditLog", back_populates="actor", foreign_keys="AuditLog.actor_id"
@@ -111,6 +128,49 @@ class UserHubScope(Base):
     user: Mapped[User] = relationship("User", back_populates="hub_scopes")
 
     __table_args__ = (UniqueConstraint("user_id", "hub_name", name="uq_user_hub"),)
+
+
+# ---------------------------------------------------------------------------
+# Sessions (server-side session storage, FR-AUTH-4/5)
+# ---------------------------------------------------------------------------
+
+
+class Session(Base):
+    """Server-side session record.
+
+    One row per active browser session.  M4 auth middleware reads and
+    writes this table on every authenticated request.
+
+    issued_at + expires_at enforce the 24-hour absolute cap (FR-AUTH-4).
+    last_seen_at drives the 4-hour idle check; bumped on each request.
+    revoked_at is set on logout (FR-AUTH-5) and on offboarding when the
+      Google account is deactivated (NFR-COMP-2).
+    client_ip and user_agent feed the audit log entry written at login.
+    """
+
+    __tablename__ = "sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    user: Mapped[User] = relationship("User", back_populates="sessions")
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +226,8 @@ class ColumnMapping(Base):
 class Comment(Base):
     """Free-text comment keyed by (position, seniority, hub, salary_eur).
 
+    FR-COMMENT-1 says comments are "keyed by" this tuple, meaning exactly one
+    comment per hire key.  A UNIQUE constraint enforces that at the DB level.
     Displayed next to above-midpoint hire rows in the report (FR-REPORT-5).
     Text is capped at 500 characters (PRD glossary: "Hire note").
     """
@@ -188,7 +250,12 @@ class Comment(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (Index("ix_comments_key", "position", "seniority", "hub", "salary_eur"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "position", "seniority", "hub", "salary_eur", name="uq_comment_hire_key"
+        ),
+        Index("ix_comments_key", "position", "seniority", "hub", "salary_eur"),
+    )
 
 
 class BenchmarkNote(Base):
@@ -260,20 +327,21 @@ class HubPair(Base):
 
 
 # ---------------------------------------------------------------------------
-# Audit log (append-only, FR-AUDIT-1..3)
+# Audit log (append-only, FR-AUDIT-1..3, ADR 0010)
 # ---------------------------------------------------------------------------
 
 
 class AuditLog(Base):
     """Append-only audit log.
 
-    The DB role used by the app must not have UPDATE or DELETE grants on this
-    table (TC-I-AUD-3). Application code only ever INSERTs.
+    DB grants (ADR 0010): the app role has INSERT + SELECT only; no UPDATE or
+    DELETE.  A separate retention-sweep role has DELETE only.  No role gets
+    UPDATE. TC-I-AUD-3 asserts this at test time.
 
-    actor_email and actor_display_name are nullable to support the right-to-erasure
-    flow (NFR-PRIV-5): when a user is deleted, these fields are replaced with
-    "deleted user" placeholders while actor_id, action, target, and created_at
-    are preserved.
+    actor_email and actor_display_name are NOT NULL. On user deletion (NFR-PRIV-5,
+    right to erasure) a dedicated erasure job overwrites them with the literal
+    string "deleted user" while actor_id is set to NULL via FK ON DELETE SET NULL.
+    This preserves the audit trail (action, target, timestamp) while removing PII.
     """
 
     __tablename__ = "audit_log"
@@ -295,7 +363,11 @@ class AuditLog(Base):
         "User", back_populates="audit_entries", foreign_keys=[actor_id]
     )
 
-    __table_args__ = (Index("ix_audit_log_actor_id", "actor_id"),)
+    __table_args__ = (
+        Index("ix_audit_log_actor_id", "actor_id"),
+        # Composite index supports FR-AUDIT-3 filtering by action + date range (N2).
+        Index("ix_audit_log_action_created_at", "action", "created_at"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +378,9 @@ class AuditLog(Base):
 class SheetSnapshot(Base):
     """Single-row table holding the last successfully fetched Sheet payload.
 
-    raw_json is the full list of row dicts as a JSON string.
+    raw_rows is the full list of row dicts stored as JSONB (N4).
+    The CHECK (id = 1) constraint enforces the single-row invariant at the
+    DB level (N3).
     fetched_at is UTC. column_hash is a SHA-256 of the sorted column headers,
     used to detect schema drift between fetches.
     """
@@ -314,8 +388,12 @@ class SheetSnapshot(Base):
     __tablename__ = "sheet_snapshot"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    raw_json: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSONB stores the list of row dicts directly; Any is correct here because
+    # Postgres JSONB is structurally untyped at the DB layer.
+    raw_rows: Mapped[Any] = mapped_column(JSONB, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     column_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (CheckConstraint("id = 1", name="ck_sheet_snapshot_single_row"),)

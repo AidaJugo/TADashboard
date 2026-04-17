@@ -5,7 +5,8 @@ They do not require a Postgres connection.
 
 docs/testing.md §4.1:
   TC-I-SH-1: Happy path: fixture Sheet loads and parses into the canonical model.
-  TC-I-SH-2: Missing required column returns a schema error.
+  TC-I-SH-2: Missing required column returns a schema error (stale=True, last_good
+             preserved — B2 hardening).
   TC-I-SH-3: Sheet unreachable: last-known-good snapshot is returned with stale=True.
   TC-I-SH-4: Cache hit within TTL does not call Google.
   TC-I-SH-5: Cache miss after TTL refreshes the data and updates the snapshot.
@@ -128,6 +129,48 @@ async def test_tc_i_sh_2_missing_required_column_returns_schema_error(
     assert result.schema_error is not None
     assert "Year" in result.schema_error
     assert result.rows == []
+
+
+@pytest.mark.integration
+@patch("app.sheets.client._build_gspread_client")
+async def test_tc_i_sh_2_schema_error_sets_stale_true(mock_build: MagicMock) -> None:
+    """B2/N5: A schema-error result must have stale=True so it is never promoted
+    to last_good in the cache and never persisted as the snapshot."""
+    ws = _mock_worksheet(FIXTURE_MISSING_YEAR)
+    mock_build.return_value = _mock_gspread_client(_mock_spreadsheet(ws))
+
+    client = _make_client()
+    result = await client.get_rows(db=None)
+
+    assert result.stale is True
+    assert result.schema_error is not None
+
+
+@pytest.mark.integration
+@patch("app.sheets.client._build_gspread_client")
+async def test_tc_i_sh_2_schema_error_does_not_overwrite_last_good(
+    mock_build: MagicMock,
+) -> None:
+    """B2 (hardened TC-I-SH-2): a previous good result must survive a subsequent
+    schema-error fetch.  last_good must remain the original good result."""
+    good_rows = _parse_rows(FIXTURE_ROWS, FIXTURE_HEADERS, VALID_MAPPING)
+    pre_existing_good = SheetFetchResult(
+        rows=good_rows, stale=False, fetched_at=FIXED_FETCHED_AT
+    )
+
+    client = _make_client(ttl=0)  # ttl=0 so every call re-fetches
+    client._cache._last_good = pre_existing_good  # noqa: SLF001
+
+    ws = _mock_worksheet(FIXTURE_MISSING_YEAR)
+    mock_build.return_value = _mock_gspread_client(_mock_spreadsheet(ws))
+
+    schema_error_result = await client.get_rows(db=None)
+
+    assert schema_error_result.schema_error is not None
+    assert schema_error_result.stale is True
+    # last_good must be the original good result, not the schema-error result
+    assert client._cache.last_good is pre_existing_good  # noqa: SLF001
+    assert client._cache.last_good.rows == good_rows  # noqa: SLF001
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,6 @@ The client is instantiated once at startup and held in app state.
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -123,7 +122,8 @@ class SheetsClient:
 
         result = await self._cache.get(self._fetch_live)
 
-        if db is not None and not result.stale:
+        # B2: only persist a clean, non-schema-error result as the snapshot.
+        if db is not None and not result.stale and result.schema_error is None:
             await self._persist_snapshot(db, result)
 
         return result
@@ -162,8 +162,11 @@ class SheetsClient:
                 "sheet_schema_error",
                 extra={"missing": sorted(missing_in_sheet), "tab": settings.spreadsheet_tab_name},
             )
+            # B2/N5: stale=True ensures the cache does not promote this result to
+            # last_good and the caller does not persist it as the snapshot.
             return SheetFetchResult(
                 rows=[],
+                stale=True,
                 fetched_at=datetime.now(UTC),
                 column_hash=col_hash,
                 schema_error=error_msg,
@@ -194,7 +197,7 @@ class SheetsClient:
             return
 
         try:
-            rows_data: list[dict[str, str]] = json.loads(snapshot.raw_json)
+            rows_data: list[dict[str, str]] = snapshot.raw_rows  # JSONB, already parsed
             rows = [HireRow(**r) for r in rows_data]
         except Exception as exc:
             log.warning("snapshot_parse_error", extra={"error": str(exc)})
@@ -208,18 +211,21 @@ class SheetsClient:
         )
 
     async def _persist_snapshot(self, db: AsyncSession, result: SheetFetchResult) -> None:
-        """Upsert the last-successful fetch into the sheet_snapshot table (TC-I-SH-5)."""
-        raw_json = json.dumps([r.model_dump() for r in result.rows])
+        """Upsert the last-successful fetch into the sheet_snapshot table (TC-I-SH-5).
+
+        raw_rows is stored as JSONB (N4); no JSON serialisation needed here.
+        """
+        raw_rows = [r.model_dump() for r in result.rows]
         stmt = insert(SheetSnapshot).values(
             id=1,
-            raw_json=raw_json,
+            raw_rows=raw_rows,
             fetched_at=result.fetched_at,
             column_hash=result.column_hash,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["id"],
             set_={
-                "raw_json": stmt.excluded.raw_json,
+                "raw_rows": stmt.excluded.raw_rows,
                 "fetched_at": stmt.excluded.fetched_at,
                 "column_hash": stmt.excluded.column_hash,
             },
