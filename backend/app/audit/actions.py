@@ -55,6 +55,11 @@ class AuditAction:
     user_erased: Final[str] = "user_erased"
 
     # Report pipeline (FR-REPORT-7)
+    #: Meaning: a refresh was *attempted*.  The row is written before any
+    #: Google Sheets call so it survives a refresh that fails halfway
+    #: through.  M5 may add ``sheet_refresh_success`` /
+    #: ``sheet_refresh_failed`` once the actual fetch lands and we have a
+    #: real outcome to record.
     sheet_refresh: Final[str] = "sheet_refresh"
 
     # Config edits (FR-CONFIG-*)

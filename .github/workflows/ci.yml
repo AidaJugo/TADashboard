@@ -54,6 +54,14 @@ jobs:
       - name: Mypy
         working-directory: backend
         run: uv run mypy app
+      # Run alembic separately so a broken migration surfaces as its own
+      # red step rather than being buried in pytest output.  The pytest
+      # fixtures run alembic against a different (test) database, so this
+      # also asserts that migrations apply cleanly to the deployment DB
+      # name (`ta_report`).
+      - name: Alembic upgrade head
+        working-directory: backend
+        run: uv run alembic upgrade head
       - name: Pytest (unit + integration)
         working-directory: backend
         run: uv run pytest -m "unit or integration" --cov=app --cov-report=xml

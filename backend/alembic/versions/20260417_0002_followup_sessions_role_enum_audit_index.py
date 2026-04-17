@@ -54,7 +54,10 @@ down_revision = "20260417_0001"
 branch_labels = None
 depends_on = None
 
-# Postgres ENUM type for users.role
+# Postgres ENUM type for users.role.  ``create_type=True`` (the default)
+# would auto-create on first reference; we set it False so the explicit
+# ``.create(bind, checkfirst=False)`` below is the single source of truth
+# for the CREATE TYPE — no implicit creation later from a column type.
 _USER_ROLE_ENUM = postgresql.ENUM("admin", "editor", "viewer", name="user_role", create_type=False)
 
 
@@ -64,8 +67,13 @@ def upgrade() -> None:
     #    The VARCHAR default must be dropped before the ALTER because
     #    Postgres cannot implicitly cast the text default to the new
     #    enum type (see module docstring, M4/PR-1 amendment).
+    #
+    #    The CREATE TYPE goes through the SQLAlchemy ``ENUM.create()``
+    #    method so the Python object (``_USER_ROLE_ENUM``) and the SQL
+    #    emitted are the same shape — used to be a raw ``op.execute``
+    #    string, flagged by the M4 review (should-fix #9).
     # ------------------------------------------------------------------
-    op.execute("CREATE TYPE user_role AS ENUM ('admin', 'editor', 'viewer')")
+    _USER_ROLE_ENUM.create(op.get_bind(), checkfirst=False)
     op.execute("ALTER TABLE users ALTER COLUMN role DROP DEFAULT")
     op.execute("ALTER TABLE users ALTER COLUMN role TYPE user_role USING role::user_role")
     op.execute("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'viewer'::user_role")

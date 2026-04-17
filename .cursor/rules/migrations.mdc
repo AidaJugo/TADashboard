@@ -8,10 +8,20 @@ alwaysApply: false
 
 ## Rules
 
-- Forward-only. Never edit or delete a migration that has been merged to `main`.
+- Forward-only. Never edit or delete a migration that has been **successfully applied anywhere** (dev, CI, staging, prod). Once any deployed database carries the row in `alembic_version`, the only way forward is a new migration on top.
 - Schema changes and data backfills live in separate migrations. Easier to review and revert.
 - Every migration has a docstring that states: what it does, why, and how to roll back manually if production forces it.
 - `downgrade()` must be implemented or explicitly raise `NotImplementedError("forward-only")` with a comment.
+
+### Edit-in-place exception
+
+If a merged migration has **never successfully applied anywhere** — for example because it raised on the first `alembic upgrade head` and rolled back, leaving no `alembic_version` row — the safer path is to fix it in place rather than ship a follow-up migration that depends on a known-broken parent. The fix-in-place must:
+
+1. Be documented in the migration's module docstring (what was wrong, what changed, the date).
+2. Be approved by a reviewer in the PR description.
+3. Not change the revision id or `down_revision` so the linear history is preserved.
+
+Worked example: `20260417_0002_followup_sessions_role_enum_audit_index.py` (M4/PR-1, 2026-04-17). The original `ALTER COLUMN role TYPE user_role` failed in Postgres because the prior VARCHAR default (`'viewer'`) could not be implicitly cast to the new ENUM. The whole transactional migration rolled back, so no database carried it. The amendment dropped the default before the type change and re-set it after.
 
 ## Naming
 

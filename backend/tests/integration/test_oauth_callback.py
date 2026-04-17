@@ -272,6 +272,7 @@ async def test_tc_i_auth_8_rejects_unverified_email(
 async def test_rejects_when_email_verified_is_missing(
     api_client: TestClient,
     viewer_user: uuid.UUID,
+    owner_session: AsyncSession,
 ) -> None:
     _ = viewer_user
     _install_fake_oidc(
@@ -285,6 +286,14 @@ async def test_rejects_when_email_verified_is_missing(
     )
     resp = _start_and_callback(api_client)
     assert resp.status_code == 403
+
+    # Mirror the assertion shape used by TC-I-AUTH-8: a missing
+    # ``email_verified`` claim is the same security event as
+    # ``email_verified=false`` and must produce the same audit row
+    # (M4 review nice-to-have: symmetry with TC-I-AUTH-2/3).
+    rows = (await owner_session.execute(select(AuditLog))).scalars().all()
+    actions = [r.action for r in rows]
+    assert AuditAction.login_denied_email_unverified in actions
 
 
 # ---------------------------------------------------------------------------
