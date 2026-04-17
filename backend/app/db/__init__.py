@@ -1,8 +1,39 @@
 """Database access layer.
 
-TODO: implement
-- SQLAlchemy engine and session factory reading DATABASE_URL from app.config.
-- Models for: users, roles, user_hub_scopes, config_kv, column_mappings,
-  comments, benchmark_notes, city_pairs, audit_log, sheet_snapshot.
-- Alembic initial migration(s) in ../alembic/.
+Re-exports the ORM Base, models, session factory, and the FastAPI dependency
+so callers only need ``from app.db import ...``.
 """
+
+from app.db.models import (
+    AuditLog,
+    Base,
+    BenchmarkNote,
+    CityNote,
+    ColumnMapping,
+    Comment,
+    ConfigKV,
+    HubPair,
+    RoleEnum,
+    SheetSnapshot,
+    User,
+    UserHubScope,
+)
+from app.db.session import get_db, get_engine, get_session_factory
+
+__all__ = [
+    "AuditLog",
+    "Base",
+    "BenchmarkNote",
+    "CityNote",
+    "ColumnMapping",
+    "Comment",
+    "ConfigKV",
+    "HubPair",
+    "RoleEnum",
+    "SheetSnapshot",
+    "User",
+    "UserHubScope",
+    "get_db",
+    "get_engine",
+    "get_session_factory",
+]

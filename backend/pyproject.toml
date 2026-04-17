@@ -34,6 +34,8 @@ dev = [
     "types-requests",
     "httpx>=0.27",
     "pip-audit>=2.7",
+    "pytest-alembic>=0.12.1",
+    "respx>=0.23.1",
 ]
 
 [tool.uv]
