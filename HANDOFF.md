@@ -53,11 +53,17 @@ Pick tasks from the plan's todo list in this order. Ship each milestone in its o
 
 Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `user_hub_scopes`, and `audit_log` landed in the M3 follow-up migration `20260417_0002`. Do not add new columns to these without a new migration.
 
-1. `backend/app/auth/`: OAuth2 login flow with `hd=symphony.is` enforced server-side, allowlist check, server-side session backed by the `sessions` table (4h idle via `last_seen_at`, 24h absolute via `expires_at`, revoke via `revoked_at`), CSRF on state-changing routes.
+1. `backend/app/auth/`: OAuth2 login flow with `hd=symphony.is` enforced server-side, allowlist check, server-side session backed by the `sessions` table (4h idle via `last_seen_at`, 24h absolute via `expires_at`, revoke via `revoked_at`), CSRF on state-changing routes. The auth middleware must treat any session with `revoked_at IS NOT NULL` as invalid and return 401 with an audit entry on the next request.
 2. `backend/app/authz/`: role dependencies + single-source hub scoping filter (no second implementation).
 3. `backend/app/audit/`: one helper per event type, writes in the **same transaction** as the mutation.
-4. **Apply [backend/grants.sql](backend/grants.sql) in your dev and test databases.** It sets up the three-role grants model from [docs/adr/0010-audit-log-grants.md](docs/adr/0010-audit-log-grants.md): app role gets `INSERT`+`SELECT` on `audit_log` only; erasure role gets `UPDATE` on PII columns for NFR-PRIV-5; sweep role gets `DELETE` for retention. TC-I-AUD-3 asserts this from the test fixture, so load `grants.sql` in your pytest DB setup. Production application of this SQL is an M7 deploy-runbook concern, not M4.
-5. Tests: unit for role checks, integration for "unauthorized domain rejected", "un-allowlisted user rejected", "viewer cannot see other hub", session idle + absolute timeout, offboarding invalidation. E2E Playwright for login redirect shape (mocked OIDC server).
+4. **Admin session-revoke endpoint**: `POST /api/admin/users/{id}/revoke-sessions` sets `sessions.revoked_at` for all active sessions of that user. Required by [ADR 0012](docs/adr/0012-day-one-offboarding.md) so that operator-assisted offboarding can close an active session without waiting for the 24h absolute timeout. Covered by TC-I-AUTH-10.
+5. **Apply [backend/grants.sql](backend/grants.sql) in your dev and test databases.** It sets up the three-role grants model from [docs/adr/0010-audit-log-grants.md](docs/adr/0010-audit-log-grants.md): app role gets `INSERT`+`SELECT` on `audit_log` only; erasure role gets `UPDATE` on PII columns for NFR-PRIV-5; sweep role gets `DELETE` for retention. TC-I-AUD-3 asserts this from the test fixture, so load `grants.sql` in your pytest DB setup. Production application of this SQL is an M7 deploy-runbook concern, not M4.
+6. Tests: unit for role checks, integration for "unauthorized domain rejected", "un-allowlisted user rejected", "viewer cannot see other hub", session idle + absolute timeout, admin-triggered revoke invalidates the next request (TC-I-AUTH-10). E2E Playwright for login redirect shape (mocked OIDC server).
+
+**Out of M4 scope by decision:**
+
+- `TC-E-4` (Playwright DOM scope check) runs in M5 once the report UI exists. See [ADR 0011](docs/adr/0011-e2e-scope-m4-vs-m5.md). Hub scoping in M4 is covered by `TC-U-AUTHZ-3` and `TC-I-API-6`.
+- `TC-I-AUTH-9` (automatic Google offboarding probe) is Post-M4. See [ADR 0012](docs/adr/0012-day-one-offboarding.md). M4 meets NFR-COMP-2 via allowlist removal (`TC-I-AUTH-3`) plus admin session revoke (`TC-I-AUTH-10`).
 
 ### M5: report endpoint + UI port
 
@@ -75,7 +81,7 @@ Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `u
 ### M7: security hardening + deployment decision
 
 1. HTTPS-only, HSTS, CSP, rate limiting, session rotation, dependency scans required to merge.
-2. Write `docs/deployment-options.md` comparing Cloud Run vs VPN-gated infra vs self-hosted VM. Pick one as ADR 0011 (0010 is already taken by audit-log grants).
+2. Write `docs/deployment-options.md` comparing Cloud Run vs VPN-gated infra vs self-hosted VM. Pick one as ADR 0013 (0010–0012 are taken: audit-log grants, E2E scope, day-one offboarding).
 3. Ship production: Dockerfiles, secrets, DB, domain, SSO, smoke tests, runbook.
 
 ## Test expectations
@@ -136,3 +142,19 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    `vite` to a patched `^5.x` or moving to Vite 7 in a dedicated dep PR. Do NOT run
    `npm audit fix --force` — it proposes Vite 8 which is a breaking jump. Captured
    from `npm audit` run on 2026-04-17 after `make install` on `main`.
+
+5. **Automatic Google Workspace offboarding probe (`TC-I-AUTH-9`)** — deferred per
+   [ADR 0012](docs/adr/0012-day-one-offboarding.md). Scope for this PR:
+
+   - Decide between **refresh-token probe** (long-lived, requires encrypted per-user
+     secret storage; first per-user secret at rest in the system — review against
+     [ADR 0008](docs/adr/0008-secrets-env-vars.md)) and **userinfo probe** (short,
+     ~1h window, no new secret). Capture the trade-off in a new ADR.
+   - Forward-only Alembic migration adding either `sessions.google_refresh_token`
+     (encrypted) + `sessions.last_google_verified_at`, or only the timestamp column.
+   - Probe mechanism in `backend/app/auth/offboarding.py` (or equivalent), invoked
+     from the auth middleware on a cadence (e.g. every 15 minutes per session).
+     `invalid_grant` or 401 from Google → set `sessions.revoked_at`.
+   - Re-enable `TC-I-AUTH-9` and add unit tests for the probe mechanism.
+   - Update `docs/testing.md` section 7: NFR-COMP-2 gets the automatic path added
+     alongside the existing M4 allowlist + admin-revoke path.

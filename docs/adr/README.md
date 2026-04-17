@@ -20,3 +20,5 @@ Rule: any change that touches the auth model, data source, deployment target, or
 | [0008](0008-secrets-env-vars.md) | Secret management: environment variables for v1, scanned by gitleaks | Accepted |
 | [0009](0009-data-classification.md) | Data classification: Strictly Confidential | Accepted |
 | [0010](0010-audit-log-grants.md) | Audit log DB grants: app role INSERT + SELECT only | Accepted |
+| [0011](0011-e2e-scope-m4-vs-m5.md) | E2E test TC-E-4 runs in M5, not M4 | Accepted |
+| [0012](0012-day-one-offboarding.md) | Day-one offboarding: allowlist + admin revoke, automatic Google probe deferred | Accepted |

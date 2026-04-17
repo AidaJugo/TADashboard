@@ -1,6 +1,6 @@
 # Testing Strategy and Acceptance Criteria
 
-Status: DRAFT v0.2
+Status: DRAFT v0.3
 Owner: Aida Jugo Krstulovic
 Last updated: 2026-04-17
 
@@ -87,7 +87,8 @@ Coverage targets:
 - TC-I-AUTH-6: Absolute timeout: session older than `SESSION_ABSOLUTE_TIMEOUT_MINUTES` is rejected even if active (FR-AUTH-4, default 1440 minutes).
 - TC-I-AUTH-7: Logout clears the session server-side. Reuse of the old cookie returns 401.
 - TC-I-AUTH-8: Google callback with missing or false `email_verified` is rejected.
-- TC-I-AUTH-9: Google Workspace offboarding: when the OAuth refresh/userinfo call fails because the Google account is deactivated, the session is invalidated on the next authenticated request (NFR-COMP-2).
+- TC-I-AUTH-9: Google Workspace offboarding: when the OAuth refresh/userinfo call fails because the Google account is deactivated, the session is invalidated on the next authenticated request (NFR-COMP-2). **Post-M4, see [ADR 0012](adr/0012-day-one-offboarding.md).** In M4, NFR-COMP-2 is met via TC-I-AUTH-3 (allowlist removal blocks re-login) plus TC-I-AUTH-10 (admin-triggered session revoke).
+- TC-I-AUTH-10: Admin-triggered session revoke: setting `sessions.revoked_at` (via `POST /api/admin/users/{id}/revoke-sessions`) causes the next authenticated request on that session to return 401 and writes an audit entry ([ADR 0012](adr/0012-day-one-offboarding.md)).
 
 ### 4.3 API authorization
 
@@ -127,7 +128,7 @@ Coverage targets:
 - TC-E-1: Admin signs in, lands on report, sees all hubs.
 - TC-E-2: Sign-in from `devlogic.eu` (or any non-`symphony.is` domain) is rejected with a clear message.
 - TC-E-3: Sign-in from `symphony.is` but not in allowlist is rejected.
-- TC-E-4: Viewer scoped to Sarajevo and Skopje signs in. Report shows only those hubs in KPIs, summary, per-hub cards, and above-midpoint section. Belgrade data is not present anywhere in the DOM.
+- TC-E-4: Viewer scoped to Sarajevo and Skopje signs in. Report shows only those hubs in KPIs, summary, per-hub cards, and above-midpoint section. Belgrade data is not present anywhere in the DOM. **Runs in M5 acceptance, not M4, see [ADR 0011](adr/0011-e2e-scope-m4-vs-m5.md).** In M4, hub-scoping correctness is covered by TC-U-AUTHZ-3 and TC-I-API-6.
 - TC-E-5: Editor adds a comment on an above-midpoint hire. Comment appears in the report without a full reload.
 - TC-E-6: Admin changes the spreadsheet tab name to an invalid value. Save fails with a validation error. Previous config remains active.
 - TC-E-7: Google returns 500 (mocked outage). Report renders from last-known-good snapshot with a "stale" banner.
@@ -152,7 +153,7 @@ Coverage targets:
 
 Each requirement in [prd.md](prd.md) maps to at least one test case:
 
-- FR-AUTH-1..5: TC-I-AUTH-1..9, TC-E-2, TC-E-3.
+- FR-AUTH-1..5: TC-I-AUTH-1..10, TC-E-2, TC-E-3.
 - FR-AUTHZ-1..5: TC-U-AUTHZ-1..4, TC-I-API-2, TC-I-API-4, TC-I-API-6, TC-E-4, TC-S-3, TC-S-4.
 - FR-REPORT-1..7: TC-U-REP-1..9, TC-I-SH-1, TC-I-SH-3, TC-I-SH-6, TC-E-1, TC-E-7, TC-I-AUD-7.
 - FR-REPORT-8 (year selector): TC-U-REP-10, TC-I-API-1, TC-E-9.
@@ -170,7 +171,7 @@ Each requirement in [prd.md](prd.md) maps to at least one test case:
 - NFR-PRIV-5 (right to erasure): TC-I-AUD-5.
 - NFR-PRIV-6 (structured logs, PII redaction): TC-I-PRIV-1, TC-I-PRIV-2.
 - NFR-PRIV-7 (secret management): TC-S-5 (gitleaks).
-- NFR-COMP-2 (offboarding via Google Workspace): TC-I-AUTH-9.
+- NFR-COMP-2 (offboarding via Google Workspace): M4 path — TC-I-AUTH-3 (allowlist) + TC-I-AUTH-10 (admin revoke); Post-M4 path — TC-I-AUTH-9 (automatic Google probe). See [ADR 0012](adr/0012-day-one-offboarding.md).
 
 Any PRD requirement without a mapped test is a gap and must be closed before that requirement is considered "done".
 
