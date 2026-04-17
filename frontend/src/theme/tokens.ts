@@ -24,8 +24,7 @@ export const tokens = {
     peach: "#f9dfc4",
   },
   typography: {
-    fontFamily:
-      '"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontFamily: '"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     heading: {
       h1: { size: 72, weight: 700 },
       h2: { size: 48, weight: 700 },

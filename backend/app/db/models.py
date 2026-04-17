@@ -251,9 +251,7 @@ class Comment(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "position", "seniority", "hub", "salary_eur", name="uq_comment_hire_key"
-        ),
+        UniqueConstraint("position", "seniority", "hub", "salary_eur", name="uq_comment_hire_key"),
         Index("ix_comments_key", "position", "seniority", "hub", "salary_eur"),
     )
 

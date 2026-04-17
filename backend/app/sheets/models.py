@@ -57,8 +57,7 @@ class ColumnMappingConfig(BaseModel):
         if missing:
             sorted_missing = sorted(missing)
             raise ValueError(
-                f"Column mapping is missing required logical columns: "
-                f"{', '.join(sorted_missing)}"
+                f"Column mapping is missing required logical columns: {', '.join(sorted_missing)}"
             )
         duplicates = [col for col, source in v.items() if list(v.values()).count(source) > 1]
         if duplicates:

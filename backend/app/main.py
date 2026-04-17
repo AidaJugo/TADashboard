@@ -8,13 +8,16 @@ and structured logging. See HANDOFF.md at the repo root.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.logging import configure_logging, get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 configure_logging()
 log = get_logger(__name__)

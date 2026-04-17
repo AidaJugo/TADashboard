@@ -40,9 +40,7 @@ branch_labels = None
 depends_on = None
 
 # Postgres ENUM type for users.role
-_USER_ROLE_ENUM = postgresql.ENUM(
-    "admin", "editor", "viewer", name="user_role", create_type=False
-)
+_USER_ROLE_ENUM = postgresql.ENUM("admin", "editor", "viewer", name="user_role", create_type=False)
 
 
 def upgrade() -> None:
@@ -50,11 +48,7 @@ def upgrade() -> None:
     # 1. Create the `user_role` ENUM type, then alter users.role
     # ------------------------------------------------------------------
     op.execute("CREATE TYPE user_role AS ENUM ('admin', 'editor', 'viewer')")
-    op.execute(
-        "ALTER TABLE users "
-        "ALTER COLUMN role TYPE user_role "
-        "USING role::user_role"
-    )
+    op.execute("ALTER TABLE users ALTER COLUMN role TYPE user_role USING role::user_role")
 
     # ------------------------------------------------------------------
     # 2. Add `sessions` table

@@ -12,6 +12,7 @@ Rollback: No automated downgrade. If production forces a rollback, drop all
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "20260417_0001"
@@ -108,9 +109,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_comments_key", "comments", ["position", "seniority", "hub", "salary_eur"]
-    )
+    op.create_index("ix_comments_key", "comments", ["position", "seniority", "hub", "salary_eur"])
 
     op.create_table(
         "benchmark_notes",

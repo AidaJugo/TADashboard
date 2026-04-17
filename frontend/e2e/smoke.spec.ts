@@ -3,7 +3,5 @@ import { test, expect } from "@playwright/test";
 test("landing page renders", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Symphony TA Hiring Report",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Symphony TA Hiring Report");
 });

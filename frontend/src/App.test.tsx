@@ -6,8 +6,6 @@ describe("App", () => {
   it("renders the title", () => {
     render(<App />);
 
-    expect(
-      screen.getByRole("heading", { name: /symphony ta hiring report/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /symphony ta hiring report/i })).toBeInTheDocument();
   });
 });

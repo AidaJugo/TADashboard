@@ -11,7 +11,7 @@ import logging
 import sys
 from typing import Any
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 from app.config import get_settings
 
@@ -29,7 +29,7 @@ _REDACT_KEYS = {
 }
 
 
-class RedactingFormatter(jsonlogger.JsonFormatter):
+class RedactingFormatter(JsonFormatter):
     def add_fields(
         self,
         log_record: dict[str, Any],
@@ -42,12 +42,12 @@ class RedactingFormatter(jsonlogger.JsonFormatter):
                 log_record[key] = "[REDACTED]"
 
 
-_configured = False
+_HANDLER_MARK = "_symphony_ta_handler"
 
 
 def configure_logging() -> None:
-    global _configured
-    if _configured:
+    root = logging.getLogger()
+    if any(getattr(h, _HANDLER_MARK, False) for h in root.handlers):
         return
 
     settings = get_settings()
@@ -58,11 +58,10 @@ def configure_logging() -> None:
             rename_fields={"asctime": "timestamp", "levelname": "level"},
         ),
     )
+    setattr(handler, _HANDLER_MARK, True)
 
-    root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(settings.log_level.upper())
-    _configured = True
 
 
 def get_logger(name: str) -> logging.Logger:

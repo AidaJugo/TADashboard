@@ -154,9 +154,7 @@ async def test_tc_i_sh_2_schema_error_does_not_overwrite_last_good(
     """B2 (hardened TC-I-SH-2): a previous good result must survive a subsequent
     schema-error fetch.  last_good must remain the original good result."""
     good_rows = _parse_rows(FIXTURE_ROWS, FIXTURE_HEADERS, VALID_MAPPING)
-    pre_existing_good = SheetFetchResult(
-        rows=good_rows, stale=False, fetched_at=FIXED_FETCHED_AT
-    )
+    pre_existing_good = SheetFetchResult(rows=good_rows, stale=False, fetched_at=FIXED_FETCHED_AT)
 
     client = _make_client(ttl=0)  # ttl=0 so every call re-fetches
     client._cache._last_good = pre_existing_good  # noqa: SLF001
