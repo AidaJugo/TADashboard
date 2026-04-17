@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from app.audit.actions import AuditAction
 from app.audit.writer import write_audit
+from app.auth.csrf import require_csrf
 from app.auth.sessions import revoke_all_sessions_for
 from app.authz.roles import CurrentUser, Role, require_role  # noqa: TC001
 from app.db.session import get_db
@@ -39,7 +40,7 @@ async def admin_ping() -> dict[str, str]:
 
 @router.post(
     "/users/{user_id}/revoke-sessions",
-    dependencies=[Depends(require_role(Role.admin))],
+    dependencies=[Depends(require_csrf), Depends(require_role(Role.admin))],
 )
 async def revoke_user_sessions(
     user_id: uuid.UUID,

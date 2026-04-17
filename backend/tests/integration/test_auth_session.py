@@ -131,11 +131,13 @@ async def test_tc_i_auth_7_logout_revokes_session_and_rejects_old_cookie(
     viewer_user: uuid.UUID,
     seed_session: Callable[..., object],
     owner_session: AsyncSession,
+    attach_csrf: Callable[..., dict[str, str]],
 ) -> None:
     session_id, cookie = await seed_session(viewer_user)
     api_client.cookies.set(SESSION_COOKIE_NAME, cookie)
+    csrf_headers = attach_csrf(api_client)
 
-    logout_response = api_client.post("/api/auth/logout")
+    logout_response = api_client.post("/api/auth/logout", headers=csrf_headers)
     assert logout_response.status_code == 204
 
     # The TestClient keeps cookies across calls.  Server-side the session

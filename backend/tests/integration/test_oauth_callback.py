@@ -191,6 +191,13 @@ async def test_tc_i_auth_4_allowlisted_user_gets_session_and_audit_row(
     resp = _start_and_callback(api_client)
     assert resp.status_code == 302
     assert api_client.cookies.get(SESSION_COOKIE_NAME) is not None
+    # PR B (M4 review follow-up): the callback also issues the CSRF
+    # cookie alongside the session cookie.  The SPA reads ``ta_csrf``
+    # via JS and echoes it as ``X-CSRF-Token`` on every state-changing
+    # request (NFR-SEC-2).
+    from app.auth.csrf import CSRF_COOKIE_NAME
+
+    assert api_client.cookies.get(CSRF_COOKIE_NAME) is not None
 
     session_rows = (
         (await owner_session.execute(select(SessionRow).where(SessionRow.user_id == viewer_user)))

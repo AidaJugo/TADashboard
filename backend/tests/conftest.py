@@ -545,6 +545,35 @@ async def seed_session(
 
 
 # ---------------------------------------------------------------------------
+# CSRF helper for POST integration tests (PR B of M4 review follow-up)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def attach_csrf() -> Callable[[TestClient], dict[str, str]]:
+    """Set the ``ta_csrf`` cookie on ``client`` and return matching headers.
+
+    State-changing routes (``POST /api/auth/logout``, ``POST /api/report/refresh``,
+    ``POST /api/admin/users/{id}/revoke-sessions``) require a double-submit
+    CSRF check (``app.auth.csrf``).  Tests call::
+
+        headers = attach_csrf(api_client)
+        api_client.post("/api/auth/logout", headers=headers)
+
+    The fixture deliberately picks a fixed token value so test failures
+    surface as "got 403 csrf" rather than as flaky randomness.
+    """
+    from app.auth.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
+
+    def _attach(client: TestClient) -> dict[str, str]:
+        token = "test-csrf-token-fixed-for-determinism"  # noqa: S105 — test fixture
+        client.cookies.set(CSRF_COOKIE_NAME, token)
+        return {CSRF_HEADER_NAME: token}
+
+    return _attach
+
+
+# ---------------------------------------------------------------------------
 # Structured-log capture (TC-I-PRIV-2 backbone)
 # ---------------------------------------------------------------------------
 

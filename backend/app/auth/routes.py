@@ -34,6 +34,7 @@ from app.auth.cookies import (
     set_session_cookie,
     verify_cookie,
 )
+from app.auth.csrf import clear_csrf_cookie, require_csrf, set_csrf_cookie
 from app.auth.oauth import (
     OAuthError,
     OIDCClient,
@@ -194,6 +195,10 @@ async def oauth_callback(  # noqa: PLR0913 — FastAPI deps + query args
 
     response = RedirectResponse(url=settings.app_base_url, status_code=status.HTTP_302_FOUND)
     set_session_cookie(response, session_row.id)
+    # Mint a fresh CSRF token paired with the session cookie.  The SPA
+    # reads ``ta_csrf`` from JS and echoes it as ``X-CSRF-Token`` on
+    # every state-changing request (NFR-SEC-2, see app.auth.csrf).
+    set_csrf_cookie(response)
     _clear_state_cookie(response)
     return response
 
@@ -218,7 +223,11 @@ async def me(user: CurrentUser) -> dict[str, object]:
     }
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
 async def logout(
     request: Request,
     response: Response,
@@ -250,6 +259,7 @@ async def logout(
             )
 
     clear_session_cookie(response)
+    clear_csrf_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

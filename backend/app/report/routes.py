@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from app.audit.actions import AuditAction
 from app.audit.writer import write_audit
+from app.auth.csrf import require_csrf
 from app.authz.hub_scope import filter_hub_names, is_hub_allowed, load_allowed_hubs
 from app.authz.roles import CurrentUser, Role, require_role  # noqa: TC001
 from app.db.session import get_db
@@ -77,7 +78,7 @@ async def get_report(
 @router.post(
     "/refresh",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_role(Role.admin, Role.editor))],
+    dependencies=[Depends(require_csrf), Depends(require_role(Role.admin, Role.editor))],
 )
 async def refresh_report(
     request: Request,
