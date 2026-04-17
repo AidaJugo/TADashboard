@@ -19,3 +19,4 @@ Rule: any change that touches the auth model, data source, deployment target, or
 | [0007](0007-observability-stdout.md) | Observability: structured JSON logs to stdout for v1 | Accepted |
 | [0008](0008-secrets-env-vars.md) | Secret management: environment variables for v1, scanned by gitleaks | Accepted |
 | [0009](0009-data-classification.md) | Data classification: Strictly Confidential | Accepted |
+| [0010](0010-audit-log-grants.md) | Audit log DB grants: app role INSERT + SELECT only | Accepted |
