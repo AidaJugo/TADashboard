@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     app_env: str = Field(default="dev", description="dev | test | staging | prod")
-    app_base_url: str = Field(default="http://localhost:8000")
+    app_base_url: str = Field(default="http://localhost:5173")
 
     database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/ta_report",
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     google_oauth_client_id: str = Field(default="")
     google_oauth_client_secret: str = Field(default="")
     google_oauth_redirect_uri: str = Field(
-        default="http://localhost:8000/auth/callback",
+        default="http://localhost:8000/api/auth/callback",
     )
     allowed_hd: str = Field(
         default="symphony.is",

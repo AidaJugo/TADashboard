@@ -251,6 +251,10 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    anything that touches generic signatures. Captured 2026-04-17 while
    pushing the M4 nit-fix series.
 
+8. **Vite proxy target** — was hardcoded to `localhost:8000`; Docker dev needed `http://backend:8000`. Fixed via `VITE_API_PROXY_TARGET` env var (defaults to `http://localhost:8000` for host-mode dev). M7 deployment runbook should document this and confirm the production path serves the SPA from a static file server proxying to backend, not a Vite dev server.
+
+9. **OAuth redirect URI and post-login APP_BASE_URL miswired in dev** — `GOOGLE_OAUTH_REDIRECT_URI` was missing the `/api` prefix (`/auth/callback` instead of `/api/auth/callback`), and `APP_BASE_URL` pointed at the backend (`localhost:8000`) instead of the SPA (`localhost:5173`). Both caused `{"detail":"Not Found"}` 404s after Google auth. Fixed in `.env`, `.env.example`, `config.py` defaults, and `docker-compose.yml`. Production runbook (M7) must document: `GOOGLE_OAUTH_REDIRECT_URI` always ends in `/api/auth/callback`; `APP_BASE_URL` always points at the SPA origin, never the backend.
+
 7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache`** — **Fixed in `fix/tc-i-sh-6-cache-flake`.**
    Root cause was (a): `SheetCache.invalidate()` only reset `_cached_at = 0.0`
    but not `_cached`. On CI containers where `time.monotonic()` is still under

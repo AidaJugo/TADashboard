@@ -33,6 +33,25 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Validate critical config at startup; block deployment if misconfigured."""
     settings = get_settings()
 
+    # Warn if APP_BASE_URL and GOOGLE_OAUTH_REDIRECT_URI share the same host:port —
+    # that means the post-callback redirect lands on the backend, not the SPA.
+    from urllib.parse import urlparse  # noqa: PLC0415
+
+    base_netloc = urlparse(settings.app_base_url).netloc
+    redirect_netloc = urlparse(settings.google_oauth_redirect_uri).netloc
+    if base_netloc and redirect_netloc and base_netloc == redirect_netloc:
+        log.warning(
+            "oauth_redirect_misconfiguration",
+            extra={
+                "detail": (
+                    "app_base_url and google_oauth_redirect_uri point at the same host; "
+                    "the post-callback redirect will land on the backend, not the SPA"
+                ),
+                "app_base_url": settings.app_base_url,
+                "google_oauth_redirect_uri": settings.google_oauth_redirect_uri,
+            },
+        )
+
     if settings.app_env == "prod":
         # In production the two restricted DB role URLs MUST be explicitly
         # configured.  Falling back to the app role silently breaks the privacy
