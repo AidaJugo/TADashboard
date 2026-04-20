@@ -244,7 +244,10 @@ test("TC-E-12: admin attempts to demote last remaining admin — UI shows 409 er
   );
 
   // User list: only one admin.
-  await page.route("**/api/admin/users", (route) => {
+  // Match both GET /api/admin/users (list) and PATCH /api/admin/users/:id (update).
+  // The glob "**/api/admin/users" only matches the bare path; the PATCH goes to
+  // /api/admin/users/:id, so we use a regex to cover both forms.
+  await page.route(/\/api\/admin\/users/, (route) => {
     if (route.request().method() === "GET") {
       return route.fulfill({
         status: 200,
@@ -263,7 +266,7 @@ test("TC-E-12: admin attempts to demote last remaining admin — UI shows 409 er
         ]),
       });
     }
-    // PATCH → 409 last-admin guard.
+    // PATCH /api/admin/users/:id → 409 last-admin guard.
     if (route.request().method() === "PATCH") {
       return route.fulfill({
         status: 409,
