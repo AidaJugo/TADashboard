@@ -48,7 +48,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker  # noqa: TC002
 from sqlalchemy.orm import selectinload
 
 from app.admin.schemas import (
@@ -133,7 +133,7 @@ def _last_admin_guard(remaining: int) -> None:
 async def _erasure_background(
     actor_id: uuid_module.UUID,
     before_ts: datetime,
-    factory: object | None = None,
+    factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> None:
     """Redact PII from audit rows for ``actor_id`` (NFR-PRIV-5, ADR 0010).
 
@@ -639,6 +639,11 @@ async def update_config(
             target=f"mappings:{list(body.column_mappings.keys())!r}",
             client_ip=client_ip(request),
         )
+        # Update the in-memory SheetsClient so the new mapping takes effect
+        # immediately without requiring a container restart.
+        from app.sheets.client import get_sheets_client  # noqa: PLC0415
+
+        get_sheets_client().update_mapping(body.column_mappings)
 
     if changes:
         await write_audit(

@@ -273,6 +273,162 @@ function RetentionSection() {
 }
 
 // ---------------------------------------------------------------------------
+// ColumnMappingSection
+// ---------------------------------------------------------------------------
+
+const REQUIRED_LOGICAL: string[] = [
+  "Position",
+  "Seniority",
+  "City",
+  "Salary",
+  "Midpoint",
+  "Gap_EUR",
+  "Gap_PCT",
+  "Status",
+  "Month",
+  "Type",
+];
+
+const OPTIONAL_LOGICAL: string[] = ["Year", "Recruiter", "Note"];
+
+const ALL_LOGICAL = [...REQUIRED_LOGICAL, ...OPTIONAL_LOGICAL];
+
+const DEFAULT_MAPPING: Record<string, string> = {
+  Position: "Position",
+  Seniority: "Seniority",
+  City: "City",
+  Salary: "Salary",
+  Midpoint: "Midpoint",
+  Gap_EUR: "Gap_EUR",
+  Gap_PCT: "Gap_PCT",
+  Status: "Status",
+  Month: "Month",
+  Type: "Type",
+  Year: "Year",
+  Recruiter: "Recruiter",
+  Note: "Note",
+};
+
+function ColumnMappingSection() {
+  const { data: config } = useConfig();
+  const updateConfig = useUpdateConfig();
+
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [seeded, setSeeded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  if (config && !seeded) {
+    const initial: Record<string, string> = {};
+    for (const key of ALL_LOGICAL) {
+      initial[key] = config.column_mappings[key] ?? DEFAULT_MAPPING[key] ?? "";
+    }
+    setValues(initial);
+    setSeeded(true);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+    try {
+      await updateConfig.mutateAsync({ column_mappings: values });
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed.");
+    }
+  }
+
+  const thStyle: React.CSSProperties = {
+    padding: "8px 12px",
+    textAlign: "left",
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    background: tokens.colors.lightGrey,
+    color: tokens.colors.black,
+    borderBottom: `1px solid ${tokens.colors.lightGrey}`,
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: "7px 12px",
+    color: tokens.colors.black,
+    borderBottom: `1px solid ${tokens.colors.lightGrey}`,
+    verticalAlign: "middle",
+  };
+
+  return (
+    <div style={sectionCard}>
+      <h3 style={sectionTitle}>Column mapping</h3>
+      <p style={{ fontSize: 13, color: tokens.colors.black, marginBottom: tokens.spacing.md }}>
+        Map each logical field to the exact column header in your Google Sheet. Required fields must
+        match a column header. Optional fields can be left blank.
+      </p>
+      <form onSubmit={handleSave}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 13,
+            border: `1px solid ${tokens.colors.lightGrey}`,
+            borderRadius: tokens.radius.md,
+            overflow: "hidden",
+            marginBottom: tokens.spacing.md,
+          }}
+          aria-label="Column mapping"
+        >
+          <thead>
+            <tr>
+              <th style={thStyle}>Logical field</th>
+              <th style={thStyle}>Sheet column header</th>
+              <th style={thStyle}>Required</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ALL_LOGICAL.map((key, idx) => {
+              const isRequired = REQUIRED_LOGICAL.includes(key);
+              return (
+                <tr
+                  key={key}
+                  style={{
+                    background: idx % 2 === 0 ? tokens.colors.white : tokens.colors.lightGrey,
+                  }}
+                >
+                  <td style={{ ...tdStyle, fontWeight: 600 }}>{key}</td>
+                  <td style={tdStyle}>
+                    <input
+                      style={{ ...inputStyle, width: 260 }}
+                      value={values[key] ?? ""}
+                      onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+                      placeholder={isRequired ? "required" : "optional"}
+                      required={isRequired}
+                      aria-label={`Sheet header for ${key}`}
+                    />
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      color: isRequired ? tokens.colors.black : tokens.colors.blueGrey,
+                    }}
+                  >
+                    {isRequired ? "Yes" : "No"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {error && <p style={errorMsg}>{error}</p>}
+        {success && <p style={successMsg}>Saved.</p>}
+        <button style={primaryBtn} type="submit" disabled={updateConfig.isPending}>
+          {updateConfig.isPending ? "Saving…" : "Save mapping"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // HubPairsSection
 // ---------------------------------------------------------------------------
 
@@ -328,7 +484,7 @@ function HubPairsSection() {
     if (!window.confirm("Remove this hub pair?")) return;
     try {
       await remove.mutateAsync(id);
-    } catch (_err) {
+    } catch {
       // Error surfacing handled by query state
     }
   }
@@ -524,6 +680,7 @@ export function AdminConfigPage() {
         Config &amp; hub pairs
       </h2>
       <SpreadsheetConfigSection />
+      <ColumnMappingSection />
       <HubPairsSection />
       <RetentionSection />
     </div>
