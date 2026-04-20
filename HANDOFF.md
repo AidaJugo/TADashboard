@@ -43,13 +43,13 @@ Repo scaffold:
 
 Pick tasks from the plan's todo list in this order. Ship each milestone in its own small PR, or a small sequence of PRs.
 
-### M3: data model + Sheets client (closed loop, no UI yet)
+### ~~M3: data model + Sheets client~~ — COMPLETE
 
 1. `backend/app/db/` models for `users`, `roles`, `user_hub_scopes`, `config_kv`, `column_mappings`, `comments`, `benchmark_notes`, `city_pairs`, `audit_log`, `sheet_snapshot`. Alembic migration generated in one shot, forward-only (see [.cursor/rules/migrations.mdc](.cursor/rules/migrations.mdc)).
 2. `backend/app/sheets/` client with service account auth, admin-configurable column mapping, in-process TTL cache, "refresh now" invalidation, fallback to `sheet_snapshot` on failure.
 3. Tests: unit for column mapping, integration that spins Postgres via the CI service and validates the fallback path with a mocked Sheets client.
 
-### M4: auth + authz + audit
+### ~~M4: auth + authz + audit~~ — COMPLETE
 
 Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `user_hub_scopes`, and `audit_log` landed in the M3 follow-up migration `20260417_0002`. Do not add new columns to these without a new migration.
 
@@ -65,7 +65,7 @@ Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `u
 - `TC-E-4` (Playwright DOM scope check) runs in M5 once the report UI exists. See [ADR 0011](docs/adr/0011-e2e-scope-m4-vs-m5.md). Hub scoping in M4 is covered by `TC-U-AUTHZ-3` and `TC-I-API-6`.
 - `TC-I-AUTH-9` (automatic Google offboarding probe) is Post-M4. See [ADR 0012](docs/adr/0012-day-one-offboarding.md). M4 meets NFR-COMP-2 via allowlist removal (`TC-I-AUTH-3`) plus admin session revoke (`TC-I-AUTH-10`).
 
-### M5: report endpoint + UI port — **COMPLETE**
+### ~~M5: report endpoint + UI port~~ — COMPLETE (`git tag m5`, 2026-04-17)
 
 All backend logic, API endpoint, frontend components, numerical parity test, and
 Playwright E2E scaffolding are implemented and tested.
@@ -102,7 +102,7 @@ M5 spec wording was stale — fixed here.
 TC-I-API-1/6/8/9, TC-I-AUD-7, TC-U-REP-7 parity, TC-E-1/4/5/7/9/10).
 `docs/testing.md` section 7 updated. `HANDOFF.md` updated.
 
-### M6: admin UI + historical data + PDF export
+### M6: admin UI + historical data + PDF export ← **Next milestone**
 
 1. Admin screens (PRD FR-ADMIN): users, column mapping, comments, benchmark notes, city pairs, retention windows. Every mutation audited.
 2. 2025 historical data import (PRD FR-REPORT-8, FR-REPORT-9): one-off loader + year selector + comparison view.
@@ -151,10 +151,32 @@ See [docs/testing.md](docs/testing.md). For every feature PR:
 - TA domain questions: Enis Kudo.
 - Anything that touches auth, audit, or secrets: pair with Aida before merging.
 
+## Post-M5 backlog
+
+Items identified during the Opus M5 pre-merge review. The two below are documented for completeness — both were **resolved during the M5 review fix series** and do not need further work unless a regression appears.
+
+1. **`unknown_statuses` docstring clarification (Opus M5 review item 9)** — `compute_period` in
+   `backend/app/report/logic.py` now has an explicit multi-line comment stating that `rows`
+   arrives already period-filtered by `build_period_data`. Prevents a future refactor from
+   moving the unknown-status scan upstream and silently breaking TC-U-REP-8 isolation.
+   _Completed in the M5 nice-to-have commit._
+
+2. **Shared `get_settings.cache_clear()` fixture in conftest (Opus M5 review item 13)** —
+   `override_app_env` fixture added to `backend/tests/conftest.py`. Wraps
+   `monkeypatch.setenv("APP_ENV", ...) + get_settings.cache_clear()` with guaranteed teardown
+   cleanup so future tests can depend on it instead of hand-rolling the cache-clear pattern.
+   _Completed in the M5 nice-to-have commit._
+
+3. **`previous_year_missing` semantics split (Opus M5 review item 12)** — The flag currently
+   conflates "no data for the previous year at all" with "no data for this specific period
+   slice." TC-U-REP-12 may need both signals separately. Tagged `TODO(M6)` in
+   `backend/app/report/routes.py`. Implement when building the YoY comparison UI in M6:
+   keep `previous_year_missing` for backward compat, add `previous_period_empty`.
+
 ## Post-M4 backlog
 
-These items were identified during the M3 review and deferred. None are blockers for
-M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
+These items were identified during M3/M4 review. Items 7 (cache flake) was fixed in M5.
+Remaining items are still open. Pick them up in a follow-up PR when relevant.
 
 1. **Refactor `SheetCache` to expose `seed_last_good(result)`** — replace the direct
    private-attribute write `self._cache._last_good = ...` in
@@ -168,9 +190,9 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    before load increases. File: `backend/app/sheets/client.py`, `_fetch_live` method.
 
 3. **`audit_log.target` as structured JSONB** — the current `target` column is free
-   text. When M5 enumerates all audit event types (config edit, comment CRUD, user
+   text. When M6 enumerates all audit event types (config edit, comment CRUD, user
    CRUD), convert `target` to JSONB with a typed diff structure. This needs a small
-   design pass on the event schema. Do in M5.
+   design pass on the event schema.
 
 4. **Clear `esbuild` GHSA-67mh-4wv8-2f99 (5 moderate npm audit findings)** — all five
    findings chain from `esbuild <=0.24.2` via `vite`, `@vitest/mocker`, `vitest`, and
@@ -201,19 +223,9 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    `def filter_by_hub[T](...)` (see `backend/app/authz/hub_scope.py`). Ruff
    produces `def filter_by_hub[\n    T\n](args, ...)` with a trailing comma,
    black collapses to the conventional `def name[T](\n    args,\n)` style.
-   This is a formatter-vs-formatter fight, not a `ruff check` lint rule, so
-   there is nothing to add to `[tool.ruff.lint]` ignores. Resolution options
-   for a follow-up: pin matching versions, drop one of the two formatters
-   (likely black since ruff is canonical here), or wait for upstream to align
-   on PEP 695. Today we work around it by running black before pushing
-   anything that touches generic signatures. Captured 2026-04-17 while
-   pushing the M4 nit-fix series.
+   Resolution options: pin matching versions, drop black (ruff is canonical), or
+   wait for upstream to align on PEP 695. Today we work around it by running black
+   before pushing anything that touches generic signatures.
 
-7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache`** — **Fixed in `fix/tc-i-sh-6-cache-flake`.**
-   Root cause was (a): `SheetCache.invalidate()` only reset `_cached_at = 0.0`
-   but not `_cached`. On CI containers where `time.monotonic()` is still under
-   3600 s from process boot, `_is_fresh()` evaluated `(monotonic - 0.0) < 3600`
-   as True and served the cached entry, so `_build_gspread_client` was only
-   called once. Fix: `invalidate()` now also sets `_cached = None`, making
-   `_is_fresh()` unconditionally False after invalidation. All 12 TC-I-SH-*
-   tests pass. Main is green.
+~~7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache`** — **Fixed in M5.**~~
+   `SheetCache.invalidate()` now also sets `_cached = None`. Main is green.
