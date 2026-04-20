@@ -299,14 +299,19 @@ test("TC-E-9: year selector updates KPI values and preserves hub scope", async (
   await expect(kpiRow.getByText("31")).toBeVisible();
 
   // --- Switch to 2025 -------------------------------------------------------
+  // Register the request watcher BEFORE triggering the selector change.
+  // With BrowserRouter in the tree the React re-render is tighter and the
+  // fetch for year=2025 can fire before a post-selectOption waitForRequest
+  // listener is registered (race condition).
+  const yearRequest2025 = page.waitForRequest((req) => {
+    const url = new URL(req.url());
+    return url.pathname.includes("/api/report") && url.searchParams.get("year") === "2025";
+  });
   const select = page.getByLabel("Select report year");
   await select.selectOption("2025");
 
   // 1. A new request must go out with year=2025.
-  await page.waitForRequest((req) => {
-    const url = new URL(req.url());
-    return url.pathname.includes("/api/report") && url.searchParams.get("year") === "2025";
-  });
+  await yearRequest2025;
 
   // 2. KPI values update: the 2025 total (19) is now in the KPI card row.
   //    "31" from 2026 must not be the current KPI total anymore.
