@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 test("landing page renders (TC-E-1 smoke)", async ({ browser }) => {
   const ctx = await browser.newContext({

@@ -20,6 +20,9 @@
  */
 
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 import { test, expect, type Page, type Route } from "@playwright/test";
 
 // ---------------------------------------------------------------------------
