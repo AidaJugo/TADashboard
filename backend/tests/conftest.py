@@ -461,6 +461,7 @@ def client() -> TestClient:
 @pytest_asyncio.fixture
 async def api_client(
     app_engine: AsyncEngine,
+    test_database: _TestDatabase,
     monkeypatch: pytest.MonkeyPatch,
     clean_db: None,
 ) -> AsyncGenerator[TestClient, None]:
@@ -472,15 +473,24 @@ async def api_client(
 
     Sets ``SESSION_COOKIE_INSECURE=1`` so the signed cookie can ride over
     HTTP under the TestClient; the production cookie is still Secure.
+
+    Also patches ``DATABASE_URL_ERASURE`` and ``DATABASE_URL_SWEEP`` to the
+    test-DB role URLs and resets ``_state`` so background tasks (erasure,
+    sweep) connect to the isolated test database rather than the default
+    dev URL (P0-5 fix, ADR 0010).
     """
     from app.config import get_settings
-    from app.db.session import get_db
+    from app.db.session import _state, get_db
     from app.main import app
 
     monkeypatch.setenv("SESSION_COOKIE_INSECURE", "1")
     monkeypatch.setenv("SESSION_SECRET_KEY", "test-secret-key-change-me")
+    monkeypatch.setenv("DATABASE_URL_ERASURE", test_database.erasure_url)
+    monkeypatch.setenv("DATABASE_URL_SWEEP", test_database.sweep_url)
     # Settings are lru_cached; clear so the above env vars take effect.
     get_settings.cache_clear()
+    # Reset lazy engine singletons so role engines re-read the patched URLs.
+    _state.reset()
 
     factory = async_sessionmaker(app_engine, expire_on_commit=False, autoflush=False)
 
@@ -499,6 +509,7 @@ async def api_client(
     finally:
         app.dependency_overrides.pop(get_db, None)
         get_settings.cache_clear()
+        _state.reset()
 
 
 @pytest_asyncio.fixture

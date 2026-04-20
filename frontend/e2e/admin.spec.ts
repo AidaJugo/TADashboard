@@ -18,6 +18,9 @@
  */
 
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 import { test, expect } from "@playwright/test";
 
 // ---------------------------------------------------------------------------
@@ -90,7 +93,11 @@ test("TC-E-6: admin saves invalid spreadsheet tab — UI shows error, config unc
 
   // Clear and type an invalid tab name, then save.
   await tabInput.fill("__nonexistent_tab__");
-  await page.getByRole("button", { name: "Save changes" }).first().click();
+  await page
+    .locator("form")
+    .filter({ has: tabInput })
+    .getByRole("button", { name: "Save changes" })
+    .click();
 
   // The UI must show an error message.
   const errorText = page.getByText(/422|Tab not found|Save failed/i);
@@ -273,13 +280,13 @@ test("TC-E-12: admin attempts to demote last remaining admin — UI shows 409 er
   // The admin row must be visible.
   await expect(page.getByText("e2e-admin@symphony.is")).toBeVisible();
 
-  // Click Edit on the only admin row.
-  await page.getByRole("button", { name: /edit/i }).first().click();
+  // Click Edit on the only admin row — aria-label is "Edit <email>" per AdminUsersPage.
+  await page.getByRole("button", { name: "Edit e2e-admin@symphony.is" }).click();
 
   // In the inline edit row, change the role to "viewer" and save.
   const roleSelect = page.getByLabel("Role");
   await roleSelect.selectOption("viewer");
-  await page.getByRole("button", { name: /save/i }).first().click();
+  await page.getByRole("button", { name: "Save" }).click();
 
   // The UI must show an error message containing the 409 reason.
   const errorMsg = page.getByText(/409|Cannot remove the last active admin|Update failed/i);

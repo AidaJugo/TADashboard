@@ -33,6 +33,25 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Validate critical config at startup; block deployment if misconfigured."""
     settings = get_settings()
 
+    # Warn if APP_BASE_URL and GOOGLE_OAUTH_REDIRECT_URI share the same host:port —
+    # that means the post-callback redirect lands on the backend, not the SPA.
+    from urllib.parse import urlparse  # noqa: PLC0415
+
+    base_netloc = urlparse(settings.app_base_url).netloc
+    redirect_netloc = urlparse(settings.google_oauth_redirect_uri).netloc
+    if base_netloc and redirect_netloc and base_netloc == redirect_netloc:
+        log.warning(
+            "oauth_redirect_misconfiguration",
+            extra={
+                "detail": (
+                    "app_base_url and google_oauth_redirect_uri point at the same host; "
+                    "the post-callback redirect will land on the backend, not the SPA"
+                ),
+                "app_base_url": settings.app_base_url,
+                "google_oauth_redirect_uri": settings.google_oauth_redirect_uri,
+            },
+        )
+
     if settings.app_env == "prod":
         # In production the two restricted DB role URLs MUST be explicitly
         # configured.  Falling back to the app role silently breaks the privacy
@@ -70,6 +89,25 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "sweep_url_set": bool(settings.database_url_sweep.strip()),
         },
     )
+
+    # Load any admin-saved column mapping from DB so the SheetsClient uses it
+    # immediately on first request, even after a container restart.
+    try:
+        from sqlalchemy import select  # noqa: PLC0415
+
+        from app.db.models import ColumnMapping  # noqa: PLC0415
+        from app.db.session import get_session_factory  # noqa: PLC0415
+        from app.sheets.client import get_sheets_client  # noqa: PLC0415
+
+        async with get_session_factory()() as db:
+            rows = (await db.execute(select(ColumnMapping))).scalars().all()
+            if rows:
+                mapping = {r.logical_name: r.source_column for r in rows}
+                get_sheets_client().update_mapping(mapping)
+                log.info("column_mapping_loaded_from_db", extra={"count": len(rows)})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("column_mapping_load_failed", extra={"error": str(exc)})
+
     yield
 
 

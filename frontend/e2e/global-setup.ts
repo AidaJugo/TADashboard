@@ -14,6 +14,9 @@
 
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const BACKEND = process.env.E2E_BACKEND_URL ?? "http://localhost:8001";
 const FRONTEND = process.env.E2E_BASE_URL ?? "http://localhost:5173";
@@ -69,6 +72,30 @@ function makeStorageState(cookieName: string, cookieValue: string, frontendUrl: 
 export default async function globalSetup(): Promise<void> {
   const authDir = path.join(__dirname, "auth");
   await mkdir(authDir, { recursive: true });
+
+  // Probe the backend. If it is not reachable (e.g. CI runs without a
+  // backend service), write empty stub auth files so the spec files can
+  // load their storageState without crashing, then bail out early.  Tests
+  // that require a real session will fail or skip individually; the smoke
+  // spec mocks all API routes and is expected to pass regardless.
+  let backendAvailable = true;
+  try {
+    await fetch(`${BACKEND}/healthz`, { signal: AbortSignal.timeout(3000) });
+  } catch {
+    backendAvailable = false;
+  }
+
+  if (!backendAvailable) {
+    console.warn(
+      `[global-setup] Backend not reachable at ${BACKEND} — writing stub auth files. ` +
+        "Tests that require a real session will be skipped or fail individually.",
+    );
+    const stub = JSON.stringify({ cookies: [], origins: [] });
+    for (const name of ["viewer.json", "scoped-viewer.json", "admin.json"]) {
+      await writeFile(path.join(authDir, name), stub);
+    }
+    return;
+  }
 
   // --- Unscoped viewer (sees all hubs) ------------------------------------
   const viewer = await seedSession({

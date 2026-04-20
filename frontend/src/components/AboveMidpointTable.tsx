@@ -42,12 +42,12 @@ function salaryKey(n: number | null): number {
 }
 
 export function AboveMidpointTable({ entries, canEdit = false }: AboveMidpointTableProps) {
-  if (entries.length === 0) return null;
-
   const { data: comments } = useComments();
   const createComment = useCreateComment();
   const updateComment = useUpdateComment();
   const deleteComment = useDeleteComment();
+
+  if (entries.length === 0) return null;
 
   // Build a lookup: "position|seniority|hub|salary_eur" → CommentRecord
   const commentMap = new Map(

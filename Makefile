@@ -45,10 +45,10 @@ e2e:
 	cd frontend && npm run e2e
 
 dev:
-	docker-compose up --build
+	docker compose up --build
 
 build:
-	docker-compose build
+	docker compose build
 
 migration:
 	@if [ -z "$(m)" ]; then echo "usage: make migration m=\"add users table\""; exit 1; fi

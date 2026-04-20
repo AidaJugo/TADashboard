@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     app_env: str = Field(default="dev", description="dev | test | staging | prod")
-    app_base_url: str = Field(default="http://localhost:8000")
+    app_base_url: str = Field(default="http://localhost:5173")
 
     database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/ta_report",
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     google_oauth_client_id: str = Field(default="")
     google_oauth_client_secret: str = Field(default="")
     google_oauth_redirect_uri: str = Field(
-        default="http://localhost:8000/auth/callback",
+        default="http://localhost:8000/api/auth/callback",
     )
     allowed_hd: str = Field(
         default="symphony.is",
@@ -65,6 +65,16 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO")
     cors_allowed_origins: str = Field(default="http://localhost:5173")
+
+    # Day-one admin seeding (FR-AUTH-3, TC-I-AUTH-11).
+    # Comma-separated list of email[:display name] pairs, e.g.:
+    #   "aida.jugo@symphony.is:Aida Jugo,enis.kudo@symphony.is:Enis Kudo"
+    # Used by ``python -m app.admin.bootstrap`` when no --email flag is given.
+    # Leave empty in production; set on deploy or pass via --email flag directly.
+    day_one_admin_emails: str = Field(
+        default="",
+        description="Comma-separated email[:name] list for bootstrap CLI (FR-AUTH-3).",
+    )
 
     @property
     def cors_origins(self) -> list[str]:
