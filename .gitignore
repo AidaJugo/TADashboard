@@ -15,8 +15,10 @@ Thumbs.db
 *.pem
 *.key
 service-account*.json
+service_account*.json
 google-credentials*.json
 credentials.json
+/secrets/
 
 # Python
 __pycache__/
