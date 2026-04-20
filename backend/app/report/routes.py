@@ -29,11 +29,12 @@ Security notes
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 from dataclasses import replace as dataclass_replace
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 # Runtime imports required for FastAPI dependency introspection.
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
@@ -48,6 +49,7 @@ from app.logging import get_logger
 from app.report.db import load_benchmark_note, load_report_aux
 from app.report.logic import VALID_PERIODS, build_period_data
 from app.report.models import PeriodData, ReportResponse
+from app.report.pdf import html_to_pdf, render_pdf_html
 from app.sheets.client import get_sheets_client
 from app.utils.http import client_ip
 
@@ -238,3 +240,125 @@ async def refresh_report(
     await sheets_client.get_rows(db=db)
 
     return {"status": "accepted"}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/report/export-pdf  (FR-REPORT-10, ADR 0009, TC-I-API-7, TC-I-AUD-8)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/export-pdf")
+async def export_pdf(  # noqa: PLR0913
+    request: Request,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: int = Query(default=0, description="Report year (default: current year)"),
+    period: str = Query(default=_DEFAULT_PERIOD, description="Period code"),
+    compare_previous: bool = Query(
+        default=False,
+        description="Include previous-year overlay in PDF",
+    ),
+) -> Response:
+    """Return a server-rendered PDF of the caller's scoped report.
+
+    Security contract (ADR 0009, NFR-PRIV-3):
+    - Hub scope is applied server-side before rendering.  The hub names that
+      appear in the PDF come from the DB after scope intersection — never
+      from request parameters.
+    - No client-supplied string is echoed into the document body or filename.
+    - The audit row captures the server-resolved hub scope, not the request
+      (TC-I-AUD-8).
+
+    PDF library: WeasyPrint (see module docstring in app.report.pdf).
+    """
+    effective_year = year if year > 0 else _current_year()
+
+    if period not in VALID_PERIODS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Invalid period {period!r}. Valid values: {sorted(VALID_PERIODS)}",
+        )
+
+    # Resolve scope server-side.  Callers cannot inject hub names.
+    allowed_hubs = await load_allowed_hubs(db, user.id)
+
+    aux = await load_report_aux(
+        db,
+        allowed_hubs=allowed_hubs,
+        year=effective_year,
+        period=period,
+    )
+
+    sheets_client = get_sheets_client()
+    fetch_result = await sheets_client.get_rows(db=db)
+
+    current_data: PeriodData = build_period_data(
+        fetch_result.rows,
+        aux,
+        allowed_hubs=allowed_hubs,
+        year=effective_year,
+        period=period,
+    )
+
+    previous_year: int | None = None
+    previous_data: PeriodData | None = None
+    previous_year_missing = False
+
+    if compare_previous:
+        previous_year = effective_year - 1
+        prev_benchmark = await load_benchmark_note(db, year=previous_year, period=period)
+        prev_aux = dataclass_replace(aux, benchmark_notes=prev_benchmark)
+        previous_data = build_period_data(
+            fetch_result.rows,
+            prev_aux,
+            allowed_hubs=allowed_hubs,
+            year=previous_year,
+            period=period,
+        )
+        previous_year_missing = not previous_data.has_data
+
+    report = ReportResponse(
+        year=effective_year,
+        period=period,
+        stale=fetch_result.stale,
+        fetched_at=fetch_result.fetched_at,
+        data=current_data,
+        previous_year=previous_year,
+        previous_year_data=previous_data,
+        previous_year_missing=previous_year_missing,
+    )
+
+    # Render HTML then convert to PDF in a thread to avoid blocking the loop.
+    html_content = render_pdf_html(report)
+    pdf_bytes = await asyncio.to_thread(html_to_pdf, html_content)
+
+    # Audit row (TC-I-AUD-8): capture server-resolved scope, not request params.
+    # Use allowed_hubs (the dependency result) rather than aux.hub_order.
+    # aux.hub_order is the post-aggregation intersection with hub_pairs; a hub
+    # authorised for the user but not yet in hub_pairs would be missing from
+    # hub_order, causing the audit log to falsely record hubs=all (P1-7).
+    hub_scope_str = ",".join(sorted(allowed_hubs)) if allowed_hubs else "all"
+    try:
+        await write_audit(
+            db,
+            action=AuditAction.report_export_pdf,
+            actor_id=user.id,
+            actor_email=user.email,
+            actor_display_name=user.display_name,
+            target=f"year={effective_year} period={period} hubs={hub_scope_str}",
+            client_ip=client_ip(request),
+        )
+        await db.commit()
+    except Exception:
+        log.warning("export_pdf_audit_failed", extra={"user_id": str(user.id)})
+
+    # Safe filename: uses only server-validated year (int) and period (allowlist).
+    filename = f"ta-report-{effective_year}-{period}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

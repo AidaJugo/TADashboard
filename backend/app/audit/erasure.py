@@ -9,8 +9,17 @@ rest of the row (id, action, target, timestamp, actor_id link) is preserved.
 The ``UPDATE`` grant on these two columns is held **only** by the
 ``ta_report_erasure`` role (see ``backend/grants.sql``).  Callers must
 therefore use an :class:`AsyncSession` bound to that role's engine.  The
-session factory for this role is provisioned at app boot (M4 PR 3 wires it
-into a dedicated dependency); tests use the ``erasure_engine`` fixture.
+session factory for this role is :func:`app.db.session.get_erasure_session_factory`.
+
+Order of operations on user deactivation (M6 spec):
+1–4. App transaction: guard check, set is_active=False, revoke sessions,
+     write deactivation audit row (real actor identity preserved).
+5.   Commit app transaction.
+6.   ``redact_actor(erasure_db, actor_id, before_ts=deactivation_ts)``
+     — only rows created BEFORE the deactivation timestamp are redacted.
+     This deliberately excludes the step-4 audit row so the deactivation
+     event retains its real actor identity (TC-I-AUD-5 variant).
+7.   Commit erasure transaction.
 """
 
 from __future__ import annotations
@@ -24,6 +33,7 @@ from app.logging import get_logger
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,8 +44,13 @@ log = get_logger(__name__)
 ERASED_PLACEHOLDER: Final[str] = "deleted user"
 
 
-async def redact_actor(erasure_db: AsyncSession, actor_id: uuid.UUID) -> int:
-    """Redact every audit row that references ``actor_id``.
+async def redact_actor(
+    erasure_db: AsyncSession,
+    actor_id: uuid.UUID,
+    *,
+    before_ts: datetime | None = None,
+) -> int:
+    """Redact audit rows that reference ``actor_id``.
 
     Must be called against a session bound to the ``ta_report_erasure`` role.
     Returns the number of rows updated.  The caller is responsible for
@@ -48,7 +63,12 @@ async def redact_actor(erasure_db: AsyncSession, actor_id: uuid.UUID) -> int:
         fail with ``InsufficientPrivilege`` at the database layer.
     actor_id:
         The deactivated user's id.  The ``users`` row itself is handled
-        separately by the admin deactivation flow (M5).
+        separately by the admin deactivation flow.
+    before_ts:
+        When provided, only rows with ``created_at < before_ts`` are
+        redacted.  This protects the deactivation audit row itself (written
+        at ``before_ts``) from having its actor PII erased — preserving
+        the record of WHO deactivated the user (M6 spec, NFR-PRIV-5).
     """
     stmt = (
         update(AuditLog)
@@ -58,9 +78,10 @@ async def redact_actor(erasure_db: AsyncSession, actor_id: uuid.UUID) -> int:
             actor_display_name=ERASED_PLACEHOLDER,
         )
     )
+    if before_ts is not None:
+        stmt = stmt.where(AuditLog.created_at < before_ts)
+
     result = await erasure_db.execute(stmt)
-    # ``CursorResult.rowcount`` is defined on UPDATE/DELETE results but not on
-    # the base ``Result`` typing shape.  Cast via ``getattr`` to stay strict-mypy-clean.
     rowcount = int(getattr(result, "rowcount", 0) or 0)
     log.info(
         "audit_actor_redacted",

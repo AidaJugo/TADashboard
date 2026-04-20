@@ -51,12 +51,41 @@ class Settings(BaseSettings):
     spreadsheet_id: str = Field(default="")
     spreadsheet_tab_name: str = Field(default="Report Template")
 
+    # Three-role DB connections (ADR 0010).
+    # In prod, both must be non-empty and must differ from database_url.
+    # In dev/test, leave empty to fall back to database_url (grants not enforced).
+    database_url_erasure: str = Field(
+        default="",
+        description="DSN for ta_report_erasure role — NFR-PRIV-5 PII redaction (ADR 0010).",
+    )
+    database_url_sweep: str = Field(
+        default="",
+        description="DSN for ta_report_sweep role — NFR-PRIV-4 retention sweep (ADR 0010).",
+    )
+
     log_level: str = Field(default="INFO")
     cors_allowed_origins: str = Field(default="http://localhost:5173")
 
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Retention bounds (PRD NFR-PRIV-2, NFR-PRIV-4, TC-I-API-13)
+# ---------------------------------------------------------------------------
+# These are the server-enforced hard limits.  Admin UI may pre-validate, but
+# the server returns 422 if the submitted value is outside the range.
+
+RETENTION_AUDIT_MONTHS_MIN: int = 6
+RETENTION_AUDIT_MONTHS_MAX: int = 60
+
+RETENTION_BACKUP_DAYS_MIN: int = 7
+RETENTION_BACKUP_DAYS_MAX: int = 90
+
+#: Defaults stored in config_kv when no override has been set.
+RETENTION_AUDIT_MONTHS_DEFAULT: int = 18
+RETENTION_BACKUP_DAYS_DEFAULT: int = 30
 
 
 @lru_cache(maxsize=1)

@@ -20,10 +20,10 @@
 
 import { useState } from "react";
 import type React from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { tokens } from "@/theme/tokens";
 import { useReport, useRefresh } from "@/hooks/useReport";
+import { useCurrentUser } from "@/hooks/useAuth";
 import { PeriodNav, PERIOD_GROUPS } from "@/components/PeriodNav";
 import { YearSelector } from "@/components/YearSelector";
 import { YoYToggle } from "@/components/YoYToggle";
@@ -32,16 +32,8 @@ import { KpiCardRow } from "@/components/KpiCardRow";
 import { SummaryTable } from "@/components/SummaryTable";
 import { HubCards } from "@/components/HubCards";
 import { AboveMidpointTable } from "@/components/AboveMidpointTable";
+import { ExportPdfButton } from "@/components/ExportPdfButton";
 import type { PeriodGroup } from "@/components/PeriodNav";
-
-// ---------------------------------------------------------------------------
-// Query client (singleton for this page, created outside the component so it
-// is not recreated on each render)
-// ---------------------------------------------------------------------------
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false } },
-});
 
 // ---------------------------------------------------------------------------
 // Available years (2025 historical + 2026 current). FR-REPORT-8.
@@ -128,6 +120,10 @@ function ReportPageInner() {
   });
 
   const refresh = useRefresh();
+  const { data: me } = useCurrentUser();
+
+  const canEdit = me?.role === "admin" || me?.role === "editor";
+  const isAdmin = me?.role === "admin";
 
   // When the user switches group, default to the first key in that group.
   function handleGroupChange(g: PeriodGroup) {
@@ -157,6 +153,12 @@ function ReportPageInner() {
             previousYearMissing={data?.previous_year_missing ?? false}
             onChange={setComparePrev}
           />
+          <ExportPdfButton
+            year={year}
+            period={period}
+            comparePrevious={comparePrev}
+            disabled={!data?.data.has_data}
+          />
           <button
             style={refreshBtnStyle}
             disabled={refresh.isPending}
@@ -165,6 +167,22 @@ function ReportPageInner() {
           >
             {refresh.isPending ? "Refreshing…" : "Refresh"}
           </button>
+          {isAdmin && (
+            <a
+              href="/admin/users"
+              style={{
+                ...refreshBtnStyle,
+                background: "transparent",
+                border: `1px solid ${tokens.colors.white}`,
+                textDecoration: "none",
+                display: "inline-block",
+                lineHeight: "1.5",
+              }}
+              aria-label="Admin panel"
+            >
+              Admin
+            </a>
+          )}
         </div>
       </header>
 
@@ -213,7 +231,7 @@ function ReportPageInner() {
             <SummaryTable summary={data.data.summary} benchmarkNote={data.data.benchmark_note} />
             <HubCards hubRows={data.data.hub_rows} />
             {data.data.above_detail.length > 0 && (
-              <AboveMidpointTable entries={data.data.above_detail} />
+              <AboveMidpointTable entries={data.data.above_detail} canEdit={canEdit} />
             )}
 
             {/* Year-over-year panel (FR-REPORT-9) */}
@@ -266,13 +284,9 @@ function ReportPageInner() {
 }
 
 // ---------------------------------------------------------------------------
-// Exported component (wraps in QueryClientProvider)
+// Exported component
 // ---------------------------------------------------------------------------
 
 export function ReportPage() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ReportPageInner />
-    </QueryClientProvider>
-  );
+  return <ReportPageInner />;
 }

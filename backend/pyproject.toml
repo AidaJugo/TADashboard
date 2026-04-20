@@ -21,6 +21,8 @@ dependencies = [
     "pandas>=2.2",
     "openpyxl>=3.1",
     "python-json-logger>=2.0",
+    "weasyprint>=62",
+    "python-dateutil>=2.9",
 ]
 
 [dependency-groups]

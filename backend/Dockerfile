@@ -5,7 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl \
+    && apt-get install -y --no-install-recommends \
+        build-essential curl \
+        libpango-1.0-0 libpangoft2-1.0-0 \
+        libgdk-pixbuf-2.0-0 libcairo2 \
+        libffi8 shared-mime-info fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \

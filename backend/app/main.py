@@ -8,6 +8,7 @@ and structured logging. See HANDOFF.md at the repo root.
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, Response
@@ -15,15 +16,61 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.admin.routes import router as admin_router
 from app.auth.routes import router as auth_router
+from app.comments.routes import router as comments_router
 from app.config import get_settings
 from app.logging import configure_logging, get_logger
 from app.report.routes import router as report_router
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import AsyncGenerator, Awaitable, Callable
 
 configure_logging()
 log = get_logger(__name__)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Validate critical config at startup; block deployment if misconfigured."""
+    settings = get_settings()
+
+    if settings.app_env == "prod":
+        # In production the two restricted DB role URLs MUST be explicitly
+        # configured.  Falling back to the app role silently breaks the privacy
+        # contract of ADR 0010 (NFR-PRIV-4, NFR-PRIV-5).
+        missing = [
+            name
+            for name, val in [
+                ("DATABASE_URL_ERASURE", settings.database_url_erasure),
+                ("DATABASE_URL_SWEEP", settings.database_url_sweep),
+            ]
+            if not val.strip()
+        ]
+        if missing:
+            raise RuntimeError(
+                f"Production startup blocked: {', '.join(missing)} must be set "
+                "(ADR 0010 — three-role DB grant model). "
+                "See .env.example and docs/adr/0010-audit-log-grants.md."
+            )
+        # Belt-and-suspenders: the role URLs must not be the same as the app URL.
+        for name, val in [
+            ("DATABASE_URL_ERASURE", settings.database_url_erasure),
+            ("DATABASE_URL_SWEEP", settings.database_url_sweep),
+        ]:
+            if val.strip() == settings.database_url.strip():
+                raise RuntimeError(
+                    f"Production startup blocked: {name} must point to the "
+                    "restricted role, not the app role (ADR 0010)."
+                )
+
+    log.info(
+        "engine_role_resolved",
+        extra={
+            "app_env": settings.app_env,
+            "erasure_url_set": bool(settings.database_url_erasure.strip()),
+            "sweep_url_set": bool(settings.database_url_sweep.strip()),
+        },
+    )
+    yield
 
 
 def create_app() -> FastAPI:
@@ -33,6 +80,7 @@ def create_app() -> FastAPI:
         version="0.0.1",
         docs_url="/docs" if settings.app_env != "prod" else None,
         redoc_url=None,
+        lifespan=_lifespan,
     )
 
     app.add_middleware(
@@ -64,6 +112,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router)
     app.include_router(admin_router)
+    app.include_router(comments_router)
     app.include_router(report_router)
 
     # The e2e router is a session-seed backdoor for Playwright tests.

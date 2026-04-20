@@ -81,6 +81,18 @@ class AuditAction:
     note_updated: Final[str] = "note_updated"
     note_deleted: Final[str] = "note_deleted"
 
+    # Report export (FR-REPORT-10, ADR 0009)
+    #: Written after every successful PDF export.  Read-only event; audit row
+    #: is written in its own transaction (same pattern as report_view).
+    #: ``target`` captures ``year=<y> period=<p> hubs=<server-resolved-set>``.
+    report_export_pdf: Final[str] = "report_export_pdf"
+
+    # Maintenance jobs (NFR-PRIV-4, NFR-PRIV-2, ADR 0010)
+    #: Written when an admin triggers the retention sweep via the API trigger
+    #: endpoint.  The sweep function itself logs to stdout; this row records
+    #: the human actor who initiated it.
+    sweep_triggered: Final[str] = "sweep_triggered"
+
 
 #: Full set of known audit actions — used by the writer to validate a string
 #: against the closed vocabulary before insert.

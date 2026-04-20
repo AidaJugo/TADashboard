@@ -4,6 +4,7 @@
 - TC-S-3     — That 403 also writes an ``access_denied`` audit row whose
               ``target`` names the method + path that was rejected
               (FR-AUTHZ-2).  Added in M4 review follow-up PR A.
+              Extended in M6 review to cover users, config, and sweep routes.
 """
 
 from __future__ import annotations
@@ -113,6 +114,54 @@ async def test_tc_s_3_viewer_403_writes_access_denied_audit_row(
     assert action == AuditAction.access_denied
     assert actor_id == viewer_user
     assert target == "GET /api/admin/ping"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/admin/users"),
+        ("GET", "/api/admin/config"),
+        ("GET", "/api/admin/hub-pairs"),
+        # POST mutation routes require a CSRF token; the CSRF check fires before
+        # require_role, so a missing CSRF token returns 403 from CSRF (not role
+        # guard) and no access_denied audit row is written.  Those routes are
+        # covered by the per-module test_admin_*.py files which include CSRF tokens.
+    ],
+)
+async def test_tc_s_3_access_denied_audit_row_written_for_key_admin_routes(
+    method: str,
+    path: str,
+    api_client: TestClient,
+    viewer_user: uuid.UUID,
+    seed_session: Callable[..., object],
+    owner_session: AsyncSession,
+) -> None:
+    """FR-AUTHZ-2: every protected admin route writes an access_denied audit row on 403.
+
+    Parametrised over the three routes that carry the most sensitive actions:
+    user listing, config read, and sweep trigger.
+    """
+    _session_id, cookie = await seed_session(viewer_user)
+    api_client.cookies.set(SESSION_COOKIE_NAME, cookie)
+
+    response = api_client.get(path) if method == "GET" else api_client.post(path)
+    assert response.status_code == 403
+
+    rows = (
+        await owner_session.execute(
+            text(
+                "SELECT action, actor_id, target FROM audit_log "
+                "WHERE actor_id = :uid AND action = :action AND target = :target "
+                "ORDER BY created_at DESC"
+            ),
+            {
+                "uid": viewer_user,
+                "action": AuditAction.access_denied,
+                "target": f"{method} {path}",
+            },
+        )
+    ).all()
+    assert len(rows) >= 1, f"Expected access_denied audit row for {method} {path}, found none"
 
 
 async def test_admin_200_writes_no_access_denied_row(
