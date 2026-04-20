@@ -14,6 +14,9 @@
 
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const BACKEND = process.env.E2E_BACKEND_URL ?? "http://localhost:8001";
 const FRONTEND = process.env.E2E_BASE_URL ?? "http://localhost:5173";
