@@ -18,6 +18,7 @@ from app.db.models import AuditLog
 if TYPE_CHECKING:
     import uuid
     from collections.abc import Callable
+    from unittest.mock import MagicMock
 
     from fastapi.testclient import TestClient
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ async def test_tc_i_aud_7_editor_refresh_writes_audit(
     seed_session: Callable[..., object],
     owner_session: AsyncSession,
     attach_csrf: Callable[..., dict[str, str]],
+    mock_sheets_client: MagicMock,
 ) -> None:
     _sid, cookie = await seed_session(editor_user)
     api_client.cookies.set(SESSION_COOKIE_NAME, cookie)

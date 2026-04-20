@@ -19,6 +19,7 @@ from app.db.models import AuditLog
 if TYPE_CHECKING:
     import uuid
     from collections.abc import Callable
+    from unittest.mock import MagicMock
 
     from fastapi.testclient import TestClient
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,13 +60,18 @@ async def test_hub_in_scope_is_allowed(
     api_client: TestClient,
     hub_scoped_viewer: uuid.UUID,
     seed_session: Callable[..., object],
+    mock_sheets_client: MagicMock,
 ) -> None:
     _session_id, cookie = await seed_session(hub_scoped_viewer)
     api_client.cookies.set(SESSION_COOKIE_NAME, cookie)
 
     response = api_client.get("/api/report", params={"hub": "Sarajevo"})
+    # M5: full endpoint returns 200 with a ReportResponse body.
     assert response.status_code == 200
-    assert response.json()["hub"] == "Sarajevo"
+    body = response.json()
+    assert "year" in body
+    assert "period" in body
+    assert "data" in body
 
 
 async def test_unscoped_viewer_can_read_any_hub(
@@ -73,12 +79,15 @@ async def test_unscoped_viewer_can_read_any_hub(
     viewer_user: uuid.UUID,
     seed_session: Callable[..., object],
     owner_session: AsyncSession,
+    mock_sheets_client: MagicMock,
 ) -> None:
     """A viewer with no hub scope rows sees every hub (FR-AUTHZ-3)."""
     _session_id, cookie = await seed_session(viewer_user)
     api_client.cookies.set(SESSION_COOKIE_NAME, cookie)
 
     response = api_client.get("/api/report", params={"hub": "Belgrade"})
+    # With the sheets client mocked (no real Google call), the endpoint returns
+    # 200. Belgrade is a valid hub for an unscoped viewer.
     assert response.status_code == 200
 
     # No hub_scope_violation row should have been written.

@@ -179,6 +179,9 @@ Any PRD requirement without a mapped test is a gap and must be closed before tha
 
 - `make test` runs unit + integration (backend + frontend).
 - `make e2e` runs Playwright against `docker-compose.test.yml`.
+  E2E requires the test stack to be running: `docker-compose -f docker-compose.test.yml up -d`
+  and `E2E_BACKEND_URL=http://localhost:8001 E2E_BASE_URL=http://localhost:5173`.
+  Sheet calls are mocked at the network layer; no Google credentials are needed.
 - `make ci` runs everything plus lint, type-check, and security scans.
 - CI runs all three on every PR and blocks merge on failure.
 

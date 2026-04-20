@@ -54,7 +54,13 @@ class AuditAction:
     user_reactivated: Final[str] = "user_reactivated"
     user_erased: Final[str] = "user_erased"
 
-    # Report pipeline (FR-REPORT-7)
+    # Report pipeline (FR-REPORT-7, FR-AUDIT-1)
+    #: Written when a user successfully views the report.  This is a read-only
+    #: audit event so it is NOT bound to the same-transaction rule that applies
+    #: to mutations; the audit row is written in its own DB commit after the
+    #: report data is returned.  Confirmed acceptable in the M5 planning
+    #: session (see PR description for context).
+    report_view: Final[str] = "report_view"
     #: Meaning: a refresh was *attempted*.  The row is written before any
     #: Google Sheets call so it survives a refresh that fails halfway
     #: through.  M5 may add ``sheet_refresh_success`` /

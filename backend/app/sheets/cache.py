@@ -44,7 +44,15 @@ class SheetCache:
     # ------------------------------------------------------------------
 
     def invalidate(self) -> None:
-        """Force the next ``get()`` to bypass the cache (FR-REPORT-7)."""
+        """Force the next ``get()`` to bypass the cache (FR-REPORT-7).
+
+        Clears both the cached entry and its timestamp so that ``_is_fresh()``
+        returns False regardless of how small ``time.monotonic()`` is at the
+        time of the next call (relevant on freshly-started CI containers where
+        the monotonic clock has been running for well under the default 3600 s
+        TTL used in tests).
+        """
+        self._cached = None
         self._cached_at = 0.0
 
     @property
