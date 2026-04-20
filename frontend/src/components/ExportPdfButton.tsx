@@ -56,6 +56,7 @@ export function ExportPdfButton({
     <a
       href={disabled ? undefined : buildHref()}
       download
+      data-testid="export-pdf-link"
       style={disabled ? disabledStyle : btnStyle}
       aria-label={`Export ${period} ${year} report as PDF`}
       aria-disabled={disabled}
