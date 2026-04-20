@@ -141,8 +141,11 @@ test("TC-E-1: authenticated viewer loads the report and sees KPI data", async ({
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Talent Acquisition");
 
-  // KPI total is rendered somewhere on the page.
-  await expect(page.getByText("31")).toBeVisible();
+  // KPI total is rendered in the KPI card row (scoped to avoid the
+  // summary table which also shows 31 as the Total row count — TC-E-1).
+  const kpiRow = page.getByTestId("kpi-card-row");
+  await expect(kpiRow).toBeVisible();
+  await expect(kpiRow.getByText("31")).toBeVisible();
 
   // Hub cards grid is present.
   await expect(page.getByTestId("hub-cards")).toBeVisible();

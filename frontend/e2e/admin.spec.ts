@@ -199,7 +199,8 @@ test("TC-E-11: hub-scoped viewer clicks Export PDF — browser initiates downloa
   await expect(page.getByTestId("kpi-card-row")).toBeVisible();
 
   // The Export PDF link must be present and enabled.
-  const exportLink = page.getByRole("link", { name: /export pdf/i });
+  // Use data-testid since aria-label includes year/period, not "export pdf" consecutively.
+  const exportLink = page.getByTestId("export-pdf-link");
   await expect(exportLink).toBeVisible();
   await expect(exportLink).not.toHaveAttribute("aria-disabled", "true");
 
