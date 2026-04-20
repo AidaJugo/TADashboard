@@ -66,6 +66,15 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(report_router)
 
+    # The e2e router is a session-seed backdoor for Playwright tests.
+    # It MUST NOT be registered in production.  The import itself is gated so
+    # the symbols never load outside APP_ENV=test.  Strict equality — not
+    # ``in``, not ``startswith``, no case-folding.
+    if settings.app_env == "test":
+        from app.e2e.routes import router as e2e_router  # noqa: PLC0415
+
+        app.include_router(e2e_router)
+
     log.info("app_started", extra={"app_env": settings.app_env})
     return app
 

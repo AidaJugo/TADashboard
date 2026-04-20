@@ -65,12 +65,42 @@ Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `u
 - `TC-E-4` (Playwright DOM scope check) runs in M5 once the report UI exists. See [ADR 0011](docs/adr/0011-e2e-scope-m4-vs-m5.md). Hub scoping in M4 is covered by `TC-U-AUTHZ-3` and `TC-I-API-6`.
 - `TC-I-AUTH-9` (automatic Google offboarding probe) is Post-M4. See [ADR 0012](docs/adr/0012-day-one-offboarding.md). M4 meets NFR-COMP-2 via allowlist removal (`TC-I-AUTH-3`) plus admin session revoke (`TC-I-AUTH-10`).
 
-### M5: report endpoint + UI port
+### M5: report endpoint + UI port — **COMPLETE**
 
-1. `backend/app/report/`: port `compute_period` and `build_period_data` from `legacy/generate_report.py` lines 157-254 as typed, unit-tested functions. Apply hub scope from `app.authz` before aggregation.
-2. `GET /api/report?year=&month=&hub=` returning the JSON shape the frontend needs.
-3. Port `legacy/generate_report.py` lines 260-412 into React components: `KpiCardRow`, `SummaryTable`, `HubCards`, `AboveMidpointTable`, `PeriodNav`. Wire via React Query.
-4. Honour the design tokens and the voice rules in [.cursor/skills/symphony-design/SKILL.md](.cursor/skills/symphony-design/SKILL.md).
+All backend logic, API endpoint, frontend components, numerical parity test, and
+Playwright E2E scaffolding are implemented and tested.
+
+**What landed:**
+
+- `fix/tc-i-sh-6-cache-flake`: Fixed `SheetCache.invalidate()` — CI now green.
+- `feat/m5-report-logic`: `backend/app/report/logic.py` + `models.py` — typed pure functions,
+  `ReportAux` dataclass, `build_period_data` + `compute_period`. All TC-U-REP-1..13 pass.
+- `feat/m5-report-api`: `GET /api/report` + `POST /api/report/refresh` — hub scoping before
+  aggregation, YoY overlay, stale flag propagation, `report_view` audit row. All integration
+  tests pass (TC-I-API-1, TC-I-API-6, TC-I-API-8, TC-I-API-9, TC-I-AUD-7).
+- `feat/m5-frontend-shell`: React page + all components (`KpiCardRow`, `SummaryTable`,
+  `HubCards`, `AboveMidpointTable`, `PeriodNav`, `YearSelector`, `YoYToggle`, `StaleBanner`).
+  Design tokens only (TC-U-BRAND-1..5 pass). YoYToggle shows "previous year missing" marker
+  (TC-U-REP-12). StaleBanner shown when `stale=true` (TC-E-7).
+- `feat/m5-parity-e2e` (this PR):
+  - `backend/tests/unit/test_report_parity.py` — 10-test parity suite against
+    `legacy/Hiring_Report_TEST_DATA.xlsx` (all 31 rows, Q1 + Annual). TC-U-REP-7 passes.
+  - `backend/app/e2e/routes.py` — `POST /api/e2e/seed-session` test-only fixture endpoint
+    (guarded by `APP_ENV=test`; returns 404 in production).
+  - `docker-compose.test.yml` — isolated E2E stack (separate DB port 5433,
+    `APP_ENV=test`, `SESSION_COOKIE_INSECURE=1`).
+  - `frontend/e2e/global-setup.ts` — Playwright global setup; seeds viewer,
+    hub-scoped viewer, and admin sessions before any spec runs.
+  - `frontend/e2e/report.spec.ts` — TC-E-1, TC-E-4, TC-E-5, TC-E-7, TC-E-9, TC-E-10
+    (Sheet calls mocked at network layer via `page.route()`).
+  - `frontend/e2e/smoke.spec.ts` — updated heading assertion.
+
+**PRD change**: `month` query param renamed to `period` per M5 planning session. `HANDOFF.md`
+M5 spec wording was stale — fixed here.
+
+**M5 definition of done: fully met.** All in-scope tests pass (TC-U-REP-1..13, TC-U-BRAND-1..5,
+TC-I-API-1/6/8/9, TC-I-AUD-7, TC-U-REP-7 parity, TC-E-1/4/5/7/9/10).
+`docs/testing.md` section 7 updated. `HANDOFF.md` updated.
 
 ### M6: admin UI + historical data + PDF export
 
@@ -83,6 +113,13 @@ Schema is ready: `sessions`, `users` (with native `user_role` Postgres ENUM), `u
 1. HTTPS-only, HSTS, CSP, rate limiting, session rotation, dependency scans required to merge.
 2. Write `docs/deployment-options.md` comparing Cloud Run vs VPN-gated infra vs self-hosted VM. Pick one as ADR 0013 (0010–0012 are taken: audit-log grants, E2E scope, day-one offboarding).
 3. Ship production: Dockerfiles, secrets, DB, domain, SSO, smoke tests, runbook.
+
+**Deploy-time constraint (from M5 E2E scaffolding):** `APP_ENV=test` must never
+be set in production environments.  `POST /api/e2e/seed-session` is a
+session-seed backdoor gated by `APP_ENV == "test"` (strict equality) and is
+only registered in the FastAPI router under that env value.  Production Docker
+images and deploy configs must set `APP_ENV=prod` explicitly.  The M7 deploy
+runbook must codify this as a mandatory pre-flight check.
 
 ## Test expectations
 
@@ -172,17 +209,11 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
    anything that touches generic signatures. Captured 2026-04-17 while
    pushing the M4 nit-fix series.
 
-7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache` fails in CI, passes locally** —
-   `backend/tests/integration/test_sheets_client.py::test_tc_i_sh_6_manual_refresh_bypasses_cache`
-   asserts `mock_build.call_count == 2` after `client.invalidate()` followed by
-   a second `get_rows()`; CI sees 1. Failing run:
-   https://github.com/AidaJugo/TADashboard/actions/runs/24580615250. Main has
-   been red since the M4 nit-fix series landed (commit `166c848`), but the
-   failure is M3 sheets code, not M4. Likely causes, in order of probability:
-   (a) `SheetCache.invalidate()` not actually dropping the cached entry on the
-   CI Python/library combo; (b) per-test mock state leaking between the two
-   `get_rows()` calls; (c) ordering-sensitive flake. Repro steps: run
-   `uv run pytest tests/integration/test_sheets_client.py -k tc_i_sh_6
-   --count=10 -p no:randomly` locally (from `backend/`) before assuming
-   environment. Owner: whoever picks up M5 sheets work first. Captured
-   2026-04-17 during the M4 review.
+7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache`** — **Fixed in `fix/tc-i-sh-6-cache-flake`.**
+   Root cause was (a): `SheetCache.invalidate()` only reset `_cached_at = 0.0`
+   but not `_cached`. On CI containers where `time.monotonic()` is still under
+   3600 s from process boot, `_is_fresh()` evaluated `(monotonic - 0.0) < 3600`
+   as True and served the cached entry, so `_build_gspread_client` was only
+   called once. Fix: `invalidate()` now also sets `_cached = None`, making
+   `_is_fresh()` unconditionally False after invalidation. All 12 TC-I-SH-*
+   tests pass. Main is green.
