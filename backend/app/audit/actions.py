@@ -93,6 +93,12 @@ class AuditAction:
     #: the human actor who initiated it.
     sweep_triggered: Final[str] = "sweep_triggered"
 
+    # Bootstrap / deployment (FR-AUTH-3, TC-I-AUTH-11)
+    #: Written by ``python -m app.admin.bootstrap`` each time it seeds an admin.
+    #: actor_email = "system", actor_display_name = "bootstrap".
+    #: target = "user:<uuid> email:<email> created|updated"
+    admin_seeded: Final[str] = "admin_seeded"
+
 
 #: Full set of known audit actions — used by the writer to validate a string
 #: against the closed vocabulary before insert.

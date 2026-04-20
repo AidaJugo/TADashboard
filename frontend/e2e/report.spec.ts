@@ -398,10 +398,11 @@ test("TC-E-10: YoY toggle shows previous-year section and preserves hub scope in
   // 1. The previous-year section mounts.
   await expect(page.getByRole("region", { name: /2025 comparison/i })).toBeVisible();
 
-  // 2. Scoped hubs are present (at least one instance visible across both
-  //    the current-year and previous-year panels).
-  await expect(page.getByTestId("hub-card-Sarajevo").first()).toBeVisible();
-  await expect(page.getByTestId("hub-card-Skopje").first()).toBeVisible();
+  // 2. Scoped hubs are present in the previous-year panel (current-year panel
+  //    was already verified in the baseline block above the toggle click).
+  const prevYearSection = page.getByRole("region", { name: /2025 comparison/i });
+  await expect(prevYearSection.getByTestId("hub-card-Sarajevo")).toBeVisible();
+  await expect(prevYearSection.getByTestId("hub-card-Skopje")).toBeVisible();
 
   // 3. Out-of-scope hubs are absent from the entire page DOM — covers both
   //    the current-year panel and the previous-year panel (TC-E-10 core

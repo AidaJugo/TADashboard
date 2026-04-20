@@ -147,6 +147,246 @@ retention sweep are implemented and tested.
 TC-I-API-1/3/6/7/8/9/10/11/13, TC-I-AUD-7/8, TC-I-ADM-1..5, TC-I-SWP-1/2,
 TC-E-6/11/12). `docs/testing.md` section 7 updated. ADR 0013 filed.
 
+### Bootstrap: day-one admin seeding — **COMPLETE**
+
+Solves the chicken-and-egg problem: a fresh deployment has no admin in the
+allowlist, so no one can log in (FR-AUTH-3, TC-I-AUTH-11).
+
+**What landed:**
+
+- `backend/app/admin/bootstrap.py` — `seed_admin(db, email, display_name)` async
+  function + `__main__` CLI. Idempotent upsert (promotes any existing user to admin,
+  re-activates deactivated accounts). Writes an `admin_seeded` audit row every call.
+- `AuditAction.admin_seeded` constant.
+- `DAY_ONE_ADMIN_EMAILS` in `Settings` (comma-separated `email[:name]` pairs for
+  automated deploy pipelines).
+- `backend/tests/integration/test_bootstrap_admin.py` — TC-I-AUTH-11 (a–d):
+  seed creates user + audit row, idempotency, re-activation, seeded admin completes
+  the full OAuth callback flow with mocked OIDC.
+- `tests/conftest.py` — `api_client` fixture now patches `DATABASE_URL_ERASURE` and
+  `DATABASE_URL_SWEEP` to test-DB role URLs and calls `_state.reset()` so background
+  tasks (erasure, sweep) connect to the isolated test database. Fixes 2 pre-existing
+  failing tests (`test_deactivate_endpoint_erases_pii_in_background`,
+  `test_sweep_trigger_admin_ok`).
+
+**First-run setup (required on every fresh deployment):**
+
+```bash
+# Inside the backend container, or with the venv active and DB reachable:
+python -m app.admin.bootstrap \
+    --email aida.jugo@symphony.is \
+    --name "Aida Jugo Krstulović"
+
+# For automated CD pipelines, use the env var instead:
+# DAY_ONE_ADMIN_EMAILS="aida.jugo@symphony.is:Aida Jugo,enis.kudo@symphony.is:Enis Kudo" \
+# python -m app.admin.bootstrap
+```
+
+Run it once per deployment. Re-running is safe — idempotent. The audit log will
+show an `admin_seeded` row for each run.
+
+### First-run: Google Cloud + Sheet + Docker dev setup — **COMPLETE** (captured from live debugging, 2026-04-17)
+
+This section documents every step and every gotcha we hit getting a fresh clone
+to render a report on `http://localhost:5173`. Follow it in order on any new
+machine or any new Google Cloud project. Each step lists the symptom you see
+if you skip it.
+
+#### 1. Google Cloud project
+
+Use the project that owns the service account. The dev project today is
+`talentacquisition-493909` (project number `761453883625`). Record the project
+ID when creating a new one.
+
+Required APIs (enable both, not just one):
+
+- **Google Sheets API** — `https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=<PROJECT_NUMBER>`
+- **Google Drive API** — `https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=<PROJECT_NUMBER>`
+
+Symptom if missing: `gspread.exceptions.APIError: [403]: Google Sheets API has
+not been used in project ... before or it is disabled`.
+
+#### 2. Service account + JSON key
+
+1. IAM & Admin → Service Accounts → create account (or reuse existing).
+2. Keys → Add Key → JSON. Download the file.
+3. Treat the file as a secret. Rotate every 180 days per [ADR 0008](docs/adr/0008-secrets-env-vars.md).
+
+Place the JSON inside the repo at `secrets/service_account.json`. The
+`./secrets` directory is mounted into the backend container at `/run/secrets`
+by `docker-compose.yml`. The container reads the file via
+`GOOGLE_SERVICE_ACCOUNT_JSON_PATH` (default `./secrets/service_account.json`,
+which resolves to `/run/secrets/service_account.json` inside the container).
+
+Symptom if missing: backend 500 with
+`FileNotFoundError: [Errno 2] No such file or directory: '/run/secrets/service_account.json'`.
+
+The `secrets/` directory is gitignored. Never commit the JSON.
+
+#### 3. OAuth 2.0 client (for user SSO)
+
+APIs & Services → Credentials → OAuth 2.0 Client ID (type: Web application).
+
+**Authorised redirect URIs** must include, exactly:
+
+- `http://localhost:8000/api/auth/callback` (dev)
+- The production equivalent, when M7 ships.
+
+Note: the path is `/api/auth/callback`, not `/auth/callback`. This is the
+single most common misconfiguration.
+
+Record the client ID and client secret into `.env`:
+
+```
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/auth/callback
+APP_BASE_URL=http://localhost:5173
+```
+
+`APP_BASE_URL` must point at the SPA origin, not the backend. The backend
+redirects the user here after a successful login; if it points at `:8000`
+you get a blank page or a `{"detail":"Not Found"}` 404 after the OAuth
+callback completes.
+
+Symptom if `GOOGLE_OAUTH_REDIRECT_URI` disagrees with the console value:
+`Error 400: redirect_uri_mismatch` from Google's consent screen.
+
+#### 4. The Google Sheet itself
+
+Two hard requirements, both easy to miss:
+
+1. The file must be a **native Google Sheet**, not an Excel `.xlsx` uploaded
+   to Drive. The Sheets API rejects `.xlsx` with
+   `APIError: [400]: This operation is not supported for this document`.
+   Fix: open the `.xlsx` in Drive, File → Save as Google Sheets, copy the
+   **new** file's ID.
+
+2. The sheet must be shared with the service account's email. Open the
+   service-account JSON, find `"client_email": "...@...iam.gserviceaccount.com"`,
+   and share the Sheet with that address (Viewer is enough for reads).
+
+Then set in `.env`:
+
+```
+SPREADSHEET_ID=<the ID from the new native Sheet's URL>
+SPREADSHEET_TAB_NAME=<usually "Report Template">
+```
+
+The tab name is case- and whitespace-sensitive.
+
+Symptom if not shared: `APIError: [404]: Requested entity was not found`.
+
+#### 5. Make Docker actually pick up `.env`
+
+`docker compose restart` does **not** reload environment variables. It only
+restarts the process inside the existing container. Environment values are
+set at container creation and the FastAPI settings object is cached
+(`@lru_cache` on `get_settings()`). Any change to `.env`, `docker-compose.yml`
+environment blocks, or either `GOOGLE_*` / `SPREADSHEET_ID` / `APP_BASE_URL`
+requires recreating the container:
+
+```bash
+docker compose up -d --force-recreate backend
+# verify
+docker compose exec backend printenv SPREADSHEET_ID
+docker compose exec backend printenv GOOGLE_OAUTH_REDIRECT_URI
+docker compose exec backend printenv APP_BASE_URL
+```
+
+If the printed value does not match `.env`, the container was not recreated.
+
+For a cleaner wipe (also resets the Postgres volume, useful when grants.sql
+or migrations changed):
+
+```bash
+docker compose down -v
+make dev
+```
+
+#### 6. Seed day-one admins
+
+First login fails with 403 until at least one allowlist entry exists in the
+`users` table. Two paths:
+
+Preferred (automated):
+
+```bash
+# .env already has:
+# DAY_ONE_ADMIN_EMAILS=aida.jugo@symphony.is:Aida Jugo,enis.kudo@symphony.is:Enis Kudo
+docker compose exec backend uv run python -m app.admin.bootstrap
+```
+
+Manual fallback (one user at a time):
+
+```bash
+docker compose exec backend uv run python -m app.admin.bootstrap \
+  --email aida.jugo@symphony.is --name "Aida Jugo Krstulović"
+```
+
+Emergency fallback (SQL, only if bootstrap CLI itself is broken):
+
+```bash
+docker compose exec db psql -U postgres -d ta_report -c \
+  "INSERT INTO users (id, email, display_name, role) VALUES \
+   (gen_random_uuid(), 'aida.jugo@symphony.is', 'Aida Jugo Krstulović', 'admin'), \
+   (gen_random_uuid(), 'enis.kudo@symphony.is', 'Enis Kudo', 'admin');"
+```
+
+Symptom if skipped: successful Google 2FA, callback returns 200, but the
+report page shows a blank screen or a 403 because `resolve_login` denied the
+user. Check `/api/auth/me` — it returns 401 when the user is not in the
+allowlist.
+
+#### 7. Summary checklist before loading the page
+
+Confirm each of these on the host before opening `http://localhost:5173`:
+
+- `secrets/service_account.json` exists and belongs to a service account in
+  the same Google Cloud project that has Sheets API and Drive API enabled.
+- The target Sheet is a native Google Sheet (converted from Excel if needed)
+  and is shared with the service account email.
+- `.env` has: `GOOGLE_OAUTH_REDIRECT_URI` ending in `/api/auth/callback`,
+  `APP_BASE_URL=http://localhost:5173`, `SPREADSHEET_ID` and
+  `SPREADSHEET_TAB_NAME` set, `DAY_ONE_ADMIN_EMAILS` populated.
+- Google Cloud OAuth client has the exact same redirect URI registered.
+- `docker compose up -d --force-recreate backend` was run after the last
+  `.env` edit.
+- `python -m app.admin.bootstrap` ran at least once (or equivalent SQL
+  insert into `users`).
+
+#### 8. Common errors, one-line fixes
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `redirect_uri_mismatch` from Google | `GOOGLE_OAUTH_REDIRECT_URI` path or env not reloaded | Recheck `.env` path, `docker compose up -d --force-recreate backend` |
+| `{"detail":"Not Found"}` after login | `APP_BASE_URL` pointing at backend instead of SPA | Set `APP_BASE_URL=http://localhost:5173`, recreate container |
+| Blank screen after 2FA | User not in allowlist (`users` table empty) | Run `python -m app.admin.bootstrap` |
+| `API error 500`, logs: `FileNotFoundError ... service_account.json` | JSON missing from `./secrets/` | Copy service-account JSON to `secrets/service_account.json`, restart |
+| `APIError: [403]: Google Sheets API has not been used` | Sheets or Drive API disabled | Enable both in the Google Cloud project |
+| `APIError: [400]: This operation is not supported for this document` | File is an uploaded `.xlsx`, not a Google Sheet | Drive → File → Save as Google Sheets, update `SPREADSHEET_ID` |
+| `APIError: [404]: Requested entity was not found` | Service account not shared on the Sheet | Share with `client_email` from the service-account JSON |
+| Frontend proxy logs `ECONNREFUSED` to `localhost:8000` | Vite proxy hardcoded to host | `VITE_API_PROXY_TARGET=http://backend:8000` in compose env |
+| `ImportError: email-validator is not installed` | `pydantic[email]` extras not installed on bind-mounted venv | `cd backend && uv sync` on host, then restart backend |
+| Frontend renders blank (no errors visible) | `QueryClientProvider` missing from `App.tsx` | Fixed on main; if it regresses, re-wrap root |
+
+#### 9. Production carry-over
+
+The whole list above becomes the M7 deploy runbook. The concrete deliverables:
+
+- `docs/runbooks/first-run.md` extracted from this section, parameterised for
+  staging and prod URLs.
+- Automated health check that fails startup if any of the following is unset
+  in prod: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `GOOGLE_OAUTH_REDIRECT_URI`, `APP_BASE_URL`, `SPREADSHEET_ID`,
+  `DATABASE_URL_ERASURE`, `DATABASE_URL_SWEEP`, `SESSION_SECRET_KEY`.
+- Startup log line that prints the resolved `APP_BASE_URL` and
+  `GOOGLE_OAUTH_REDIRECT_URI` (no secrets) so misconfiguration is visible
+  without an OAuth round-trip. (Already listed in Post-M6 backlog.)
+- `grants.sql` applied during provisioning, before the first backend start.
+- `python -m app.admin.bootstrap` invoked from the deploy pipeline once per
+  environment, with `DAY_ONE_ADMIN_EMAILS` supplied via the secret store.
+
 ### M7: security hardening + deployment decision
 
 1. Benchmark notes and city notes CRUD admin endpoints (carry-over from M6, ADR 0013).

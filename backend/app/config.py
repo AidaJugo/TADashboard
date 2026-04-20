@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO")
     cors_allowed_origins: str = Field(default="http://localhost:5173")
 
+    # Day-one admin seeding (FR-AUTH-3, TC-I-AUTH-11).
+    # Comma-separated list of email[:display name] pairs, e.g.:
+    #   "aida.jugo@symphony.is:Aida Jugo,enis.kudo@symphony.is:Enis Kudo"
+    # Used by ``python -m app.admin.bootstrap`` when no --email flag is given.
+    # Leave empty in production; set on deploy or pass via --email flag directly.
+    day_one_admin_emails: str = Field(
+        default="",
+        description="Comma-separated email[:name] list for bootstrap CLI (FR-AUTH-3).",
+    )
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]

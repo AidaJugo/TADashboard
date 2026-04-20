@@ -89,6 +89,25 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "sweep_url_set": bool(settings.database_url_sweep.strip()),
         },
     )
+
+    # Load any admin-saved column mapping from DB so the SheetsClient uses it
+    # immediately on first request, even after a container restart.
+    try:
+        from sqlalchemy import select  # noqa: PLC0415
+
+        from app.db.models import ColumnMapping  # noqa: PLC0415
+        from app.db.session import get_session_factory  # noqa: PLC0415
+        from app.sheets.client import get_sheets_client  # noqa: PLC0415
+
+        async with get_session_factory()() as db:
+            rows = (await db.execute(select(ColumnMapping))).scalars().all()
+            if rows:
+                mapping = {r.logical_name: r.source_column for r in rows}
+                get_sheets_client().update_mapping(mapping)
+                log.info("column_mapping_loaded_from_db", extra={"count": len(rows)})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("column_mapping_load_failed", extra={"error": str(exc)})
+
     yield
 
 

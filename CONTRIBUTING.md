@@ -22,6 +22,19 @@ pre-commit install
 cp .env.example .env  # fill in values, never commit
 ```
 
+**First-run on a fresh deployment** — seed the day-one admin before anyone can log in:
+
+```bash
+# With the venv active and the database reachable:
+python -m app.admin.bootstrap \
+    --email aida.jugo@symphony.is \
+    --name "Aida Jugo Krstulović"
+
+# Re-running is safe (idempotent).
+# For CI / CD pipelines, set DAY_ONE_ADMIN_EMAILS instead of using --email:
+# DAY_ONE_ADMIN_EMAILS="aida.jugo@symphony.is:Aida Jugo" python -m app.admin.bootstrap
+```
+
 Day to day:
 
 ```bash
