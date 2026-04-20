@@ -24,7 +24,7 @@ export function YearSelector({ years, selected, onChange }: YearSelectorProps) {
         gap: tokens.spacing.sm,
         fontSize: 13,
         fontFamily: tokens.typography.fontFamily,
-        color: tokens.colors.black,
+        color: tokens.colors.white,
         fontWeight: 500,
       }}
     >
