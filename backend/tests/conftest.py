@@ -574,8 +574,68 @@ def attach_csrf() -> Callable[[TestClient], dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# Structured-log capture (TC-I-PRIV-2 backbone)
+# Sheets client mock (prevents tests from hitting real Google API)
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_sheets_client() -> Generator[Any, None, None]:
+    """Patch ``get_sheets_client`` with a mock that returns an empty fetch result.
+
+    Tests that call any endpoint touching the Sheets layer must apply this
+    fixture (or supply their own patch) so CI runs without real credentials.
+    """
+    from datetime import UTC, datetime
+    from unittest.mock import MagicMock, patch
+
+    from app.sheets.models import SheetFetchResult
+
+    empty_result = SheetFetchResult(
+        rows=[], stale=False, fetched_at=datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
+    )
+
+    async def _get_rows(*_a: object, **_kw: object) -> SheetFetchResult:
+        return empty_result
+
+    with patch("app.report.routes.get_sheets_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_client.get_rows = _get_rows
+        mock_client.invalidate = MagicMock()
+        mock_get_client.return_value = mock_client
+        yield mock_client
+
+
+# ---------------------------------------------------------------------------
+# APP_ENV override helper (get_settings LRU cache aware)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def override_app_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[Callable[[str], None], None, None]:
+    """Yield a callable that sets APP_ENV and clears the get_settings LRU cache.
+
+    Usage::
+
+        def test_something(override_app_env):
+            override_app_env("prod")
+            # get_settings() now returns settings with app_env == "prod"
+
+    The cache is cleared both on call and unconditionally at fixture teardown
+    so sibling tests are never exposed to the patched value.  Both steps are
+    necessary: the call-time clear makes the new value visible; the teardown
+    clear prevents cross-test contamination when the next test reads
+    get_settings() before monkeypatch has fully unset the env var.
+    """
+    from app.config import get_settings
+
+    def _set(env: str) -> None:
+        monkeypatch.setenv("APP_ENV", env)
+        get_settings.cache_clear()
+
+    yield _set
+    get_settings.cache_clear()
 
 
 class _JsonLogCapture:

@@ -131,7 +131,7 @@ export function AboveMidpointTable({ entries }: AboveMidpointTableProps) {
             <tbody>
               {rows.map((r, idx) => (
                 <tr
-                  key={idx}
+                  key={`${hub}-${r.position}-${r.seniority}-${r.salary ?? "x"}-${idx}`}
                   style={{
                     background: idx % 2 === 0 ? tokens.colors.white : tokens.colors.lightGrey,
                   }}

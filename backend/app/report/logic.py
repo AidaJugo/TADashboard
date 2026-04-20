@@ -219,7 +219,12 @@ def compute_period(
     PeriodData with ``has_data=False`` and all counts zero when ``rows`` is
     empty (FR-REPORT-6, TC-U-REP-2).
     """
-    # Detect rows with unknown statuses before filtering (TC-U-REP-8).
+    # Collect unrecognised status values for observability (TC-U-REP-8).
+    # ``rows`` is already period-filtered by ``build_period_data`` before
+    # ``compute_period`` is called, so this scan covers only the rows that
+    # will actually be aggregated.  Do not move this scan upstream of the
+    # period filter — doing so would attribute unknown statuses from other
+    # periods to the current result, breaking TC-U-REP-8 isolation.
     unknown_statuses = sorted(
         {
             row.status.strip()

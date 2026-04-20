@@ -31,18 +31,37 @@ async def _load_static_aux(
     Returns ``(city_to_hub, hub_order, comments, city_notes)``.
     These four structures are identical regardless of which year or period is
     being requested, so they can be computed once and reused for YoY overlays.
+
+    Comments and city-notes are pre-filtered to the caller's hub scope at SQL
+    time: only rows that belong to a hub in ``hub_order`` are fetched.  This
+    aligns with the "scope at query time" idiom in ``hub_scope.py`` and avoids
+    loading the full comment/city-note tables for scoped viewers.
     """
     hub_pair_rows = (await db.execute(select(HubPair))).scalars().all()
     city_to_hub: dict[str, str] = {hp.city_name: hp.hub_name for hp in hub_pair_rows}
     all_hub_names: list[str] = list(dict.fromkeys(hp.hub_name for hp in hub_pair_rows))
     hub_order = filter_hub_names(all_hub_names, allowed_hubs)
 
-    comment_rows = (await db.execute(select(Comment))).scalars().all()
+    # Pre-filter to the caller's hub scope so the DB only returns relevant rows.
+    hub_set = set(hub_order)
+    scoped_cities = [city for city, hub in city_to_hub.items() if hub in hub_set]
+
+    comment_rows = (
+        (await db.execute(select(Comment).where(Comment.hub.in_(hub_order)))).scalars().all()
+        if hub_order
+        else []
+    )
     comments: dict[tuple[str, str, str, int], str] = {
         (c.position, c.seniority, c.hub, c.salary_eur): c.text for c in comment_rows
     }
 
-    city_note_rows = (await db.execute(select(CityNote))).scalars().all()
+    city_note_rows = (
+        (await db.execute(select(CityNote).where(CityNote.city_name.in_(scoped_cities))))
+        .scalars()
+        .all()
+        if scoped_cities
+        else []
+    )
     city_notes: dict[str, str] = {cn.city_name: cn.text for cn in city_note_rows}
 
     return city_to_hub, hub_order, comments, city_notes

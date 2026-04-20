@@ -165,6 +165,12 @@ async def get_report(  # noqa: PLR0913
             period=period,
         )
         # TC-I-API-9: flag when the previous-year period slice has no data.
+        # TODO(M6): semantics overload — this flag conflates "the previous year
+        # has no rows at all in the Sheet" with "the previous year has rows but
+        # not for this specific period slice".  TC-U-REP-12 may need both
+        # signals separately (e.g. to render a different empty-state message).
+        # When splitting: keep previous_year_missing for backward compat and add
+        # previous_period_empty as the period-specific flag.
         previous_year_missing = not previous_data.has_data
 
     # --- Audit report view (FR-AUDIT-1) -------------------------------------
