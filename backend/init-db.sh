@@ -15,7 +15,7 @@
 set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
-    -f /docker-entrypoint-initdb.d/grants.sql
+    -f /docker-entrypoint-initdb.d/01_grants.sql
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-'EOSQL'
     ALTER ROLE ta_report_app       PASSWORD 'ta_report_app_dev'       LOGIN;

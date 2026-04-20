@@ -46,40 +46,56 @@ GRANT USAGE ON SCHEMA public TO ta_report_app, ta_report_erasure, ta_report_swee
 -- ---------------------------------------------------------------------------
 -- ta_report_app: full CRUD on all tables EXCEPT audit_log
 -- ---------------------------------------------------------------------------
+-- Wrapped in DO blocks so this file is safe to run during Docker DB init,
+-- before Alembic migrations have created the tables. The backend entrypoint
+-- re-runs this file after `alembic upgrade head` to apply the full grants.
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-  users,
-  user_hub_scopes,
-  sessions,
-  config_kv,
-  column_mappings,
-  comments,
-  benchmark_notes,
-  city_notes,
-  hub_pairs,
-  sheet_snapshot
-TO ta_report_app;
+DO $$ BEGIN
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+    users,
+    user_hub_scopes,
+    sessions,
+    config_kv,
+    column_mappings,
+    comments,
+    benchmark_notes,
+    city_notes,
+    hub_pairs,
+    sheet_snapshot
+  TO ta_report_app;
+EXCEPTION WHEN undefined_table THEN
+  RAISE NOTICE 'tables not yet created; skipping app role table grants (will be applied after alembic upgrade head)';
+END $$;
 
--- Sequences (needed for INSERT with SERIAL / DEFAULT nextval)
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ta_report_app;
+DO $$ BEGIN
+  GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ta_report_app;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
--- audit_log: INSERT + SELECT only. No UPDATE, no DELETE.
-GRANT SELECT, INSERT ON TABLE audit_log TO ta_report_app;
-
--- Explicitly revoke UPDATE and DELETE to make intent clear (in case a
--- prior broad GRANT was issued). REVOKE is a no-op if the privilege was
--- never granted.
-REVOKE UPDATE, DELETE ON TABLE audit_log FROM ta_report_app;
+DO $$ BEGIN
+  GRANT SELECT, INSERT ON TABLE audit_log TO ta_report_app;
+  REVOKE UPDATE, DELETE ON TABLE audit_log FROM ta_report_app;
+EXCEPTION WHEN undefined_table THEN
+  RAISE NOTICE 'audit_log not yet created; skipping audit_log grants';
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- ta_report_erasure: column-restricted UPDATE on audit_log PII fields only
 -- ---------------------------------------------------------------------------
 
-GRANT SELECT ON TABLE audit_log TO ta_report_erasure;
-GRANT UPDATE (actor_email, actor_display_name) ON TABLE audit_log TO ta_report_erasure;
+DO $$ BEGIN
+  GRANT SELECT ON TABLE audit_log TO ta_report_erasure;
+  GRANT UPDATE (actor_email, actor_display_name) ON TABLE audit_log TO ta_report_erasure;
+EXCEPTION WHEN undefined_table THEN
+  RAISE NOTICE 'audit_log not yet created; skipping erasure role grants';
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- ta_report_sweep: DELETE only on audit_log (retention sweep, ADR 0006)
 -- ---------------------------------------------------------------------------
 
-GRANT SELECT, DELETE ON TABLE audit_log TO ta_report_sweep;
+DO $$ BEGIN
+  GRANT SELECT, DELETE ON TABLE audit_log TO ta_report_sweep;
+EXCEPTION WHEN undefined_table THEN
+  RAISE NOTICE 'audit_log not yet created; skipping sweep role grants';
+END $$;
