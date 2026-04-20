@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.auth.cookies import SESSION_COOKIE_NAME, sign_session_id
 from app.config import get_settings
@@ -56,7 +56,7 @@ def require_e2e_env() -> None:
 
 class SeedSessionRequest(BaseModel):
     email: str = "e2e-viewer@symphony.is"
-    role: str = "viewer"
+    role: RoleEnum = RoleEnum.viewer
     allowed_hubs: list[str] = []
     display_name: str = "E2E Test User"
 
@@ -95,7 +95,7 @@ async def seed_session(
             id=uuid.uuid4(),
             email=body.email,
             display_name=body.display_name,
-            role=RoleEnum(body.role),
+            role=body.role,
             is_active=True,
         )
         db.add(user)
@@ -104,11 +104,9 @@ async def seed_session(
         user = existing
 
     # --- Hub scopes ---------------------------------------------------------
-    await db.execute(
-        # Remove existing scopes for this user before re-adding
-        # (simple idempotency for repeated calls in the same test session)
-        select(UserHubScope).where(UserHubScope.user_id == user.id)
-    )
+    # Delete all existing scopes before re-adding so repeated calls with a
+    # narrower scope don't accumulate rows and widen the effective scope.
+    await db.execute(delete(UserHubScope).where(UserHubScope.user_id == user.id))
     for hub in body.allowed_hubs:
         db.add(UserHubScope(user_id=user.id, hub_name=hub))
 
