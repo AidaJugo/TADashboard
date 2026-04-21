@@ -298,6 +298,11 @@ test("TC-E-9: year selector updates KPI values and preserves hub scope", async (
   // The 2026 total (31) is visible inside the KPI card row.
   await expect(kpiRow.getByText("31")).toBeVisible();
 
+  // --- 2024 option is present in the selector (fix/year-selector-available-years) --
+  // FR-REPORT-8 / PRD §5: "more years added as data lands" must include 2024.
+  const select = page.getByLabel("Select report year");
+  await expect(select.locator("option[value='2024']")).toBeAttached();
+
   // --- Switch to 2025 -------------------------------------------------------
   // Register the request watcher BEFORE triggering the selector change.
   // With BrowserRouter in the tree the React re-render is tighter and the
@@ -307,7 +312,6 @@ test("TC-E-9: year selector updates KPI values and preserves hub scope", async (
     const url = new URL(req.url());
     return url.pathname.includes("/api/report") && url.searchParams.get("year") === "2025";
   });
-  const select = page.getByLabel("Select report year");
   await select.selectOption("2025");
 
   // 1. A new request must go out with year=2025.
