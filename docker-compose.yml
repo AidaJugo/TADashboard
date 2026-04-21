@@ -47,6 +47,11 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      # Isolate the venv from the host bind-mount above.  Without this, `uv sync`
+      # on a macOS host installs macOS-native Pillow wheels into ./backend/.venv,
+      # which the Linux container cannot load (ImportError: _imaging).  The named
+      # volume keeps the Linux-compiled venv inside the container only.
+      - backend-venv:/app/.venv
       - ./secrets:/run/secrets:ro
 
   frontend:
@@ -66,3 +71,4 @@ services:
 volumes:
   postgres-data:
   frontend-node-modules:
+  backend-venv:
