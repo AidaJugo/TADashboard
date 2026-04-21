@@ -75,6 +75,8 @@ Security-sensitive PRs (auth, authz, audit, migrations, secrets, CI) need two re
 
 ## Iteration loop
 
+The terse, agent-targeted version of this section lives at [.cursor/rules/iteration-loop.mdc](.cursor/rules/iteration-loop.mdc) and Cursor loads it automatically on every session. The version below is the human prose, with the worked example.
+
 This is the workflow we hold ourselves and any AI agent to. It exists because we have already drifted once: during M6 troubleshooting, fixes landed on `main` directly, the column-mapping spec was silently relaxed, and a few config workarounds got mixed into product code. The loop below is what stops that.
 
 ### One change, one branch, one PR
