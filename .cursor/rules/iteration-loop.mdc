@@ -1,0 +1,52 @@
+---
+description: Iteration loop, branching, PR rules, and AI-agent workflow for this repo
+alwaysApply: true
+---
+
+# Iteration loop
+
+The full prose version with a worked example lives in [CONTRIBUTING.md](../../CONTRIBUTING.md). This rule is the enforceable short version. Agents follow it on every change.
+
+## Branching
+
+- Branch off `main`. Never commit to `main`.
+- Names: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
+- One concern per branch and per PR. If you find a second thing, open a follow-up branch.
+
+## Before writing code
+
+1. State the goal in one sentence. If you cannot, the scope is wrong; stop and clarify.
+2. Locate the PRD section and ADR(s) the change touches. Link them in the PR body.
+3. If the change conflicts with the PRD or an ADR, write the ADR (or PRD update) **first**, in the same PR. Do not silently bend the spec to fit the code.
+4. List the test IDs from `docs/testing.md` the change must pass or add.
+
+## While coding
+
+- Keep config fixes (env vars, Docker, infra) in a separate PR from product code.
+- If a deployment problem forces a code change, that code change still needs a test. No "temporary" relaxations of validation, schema, or scope checks.
+- Do-not-touch zones (see [AGENTS.md](../../AGENTS.md)) require an ADR or PRD update in the same PR. Call it out in the PR body.
+
+## Before pushing
+
+```bash
+make ci
+```
+
+Push only when green. CI is the last gate before review, not a remote linter.
+
+## Pull request
+
+- Use the [PR template](../../.github/pull_request_template.md). Fill every section.
+- Self-review the diff in GitHub before requesting a reviewer.
+- Squash-merge. Delete the branch.
+
+## Working as an AI agent in this repo
+
+- Produce a written plan before code on anything bigger than a one-file change.
+- Never silently change scope, weaken validation, or skip tests. If you discover the spec is wrong, stop and write the ADR.
+- Pick model strength by risk: stronger model for auth, authz, audit, migrations, and any do-not-touch zone; default model for UI, copy, and isolated logic.
+- If you start looping or drifting from the spec, end the session. Write what you learned to `HANDOFF.md`. Start a new session with a tighter prompt.
+
+## Worked example
+
+PR #2 (`fix/header-contrast-wcag-aa`) and PR #3 (`docs/iteration-loop`) are the smallest end-to-end passes of this loop. Match that shape for any change.
