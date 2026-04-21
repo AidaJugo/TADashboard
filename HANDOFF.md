@@ -138,8 +138,8 @@ retention sweep are implemented and tested.
 3. TC-I-DB-1..3 DB role grant enforcement tests — require three separate Postgres
    role connections in the test fixture. Pin these tests with `@pytest.mark.skipif`
    until the CI DB provisions grants.sql on first run.
-4. Real WeasyPrint smoke test (non-mocked) — build the Docker image, call
-   `html_to_pdf`, assert bytes start with `%PDF-`.
+4. ~~Real WeasyPrint smoke test (non-mocked) — build the Docker image, call
+   `html_to_pdf`, assert bytes start with `%PDF-`.~~ **Done — `backend/tests/unit/test_pdf_render.py` (fix/pdf-export-venv-isolation, PR #7).**
 5. Poppins woff2 font commit — currently vendored into `backend/app/assets/fonts/`;
    confirm CI build copies them correctly (backend `COPY app ./app` covers it).
 
@@ -494,6 +494,16 @@ M4 (auth + authz + audit). Pick them up in a follow-up PR once M4 is merged.
 8. **Vite proxy target** — was hardcoded to `localhost:8000`; Docker dev needed `http://backend:8000`. Fixed via `VITE_API_PROXY_TARGET` env var (defaults to `http://localhost:8000` for host-mode dev). M7 deployment runbook should document this and confirm the production path serves the SPA from a static file server proxying to backend, not a Vite dev server.
 
 9. **OAuth redirect URI and post-login APP_BASE_URL miswired in dev** — `GOOGLE_OAUTH_REDIRECT_URI` was missing the `/api` prefix (`/auth/callback` instead of `/api/auth/callback`), and `APP_BASE_URL` pointed at the backend (`localhost:8000`) instead of the SPA (`localhost:5173`). Both caused `{"detail":"Not Found"}` 404s after Google auth. Fixed in `.env`, `.env.example`, `config.py` defaults, and `docker-compose.yml`. Production runbook (M7) must document: `GOOGLE_OAUTH_REDIRECT_URI` always ends in `/api/auth/callback`; `APP_BASE_URL` always points at the SPA origin, never the backend.
+
+10. **Dev venv isolation (PDF export 500)** — **Fixed in `fix/pdf-export-venv-isolation` (PR #7).**
+    The `./backend:/app` bind-mount in `docker-compose.yml` caused the `.venv` to
+    be shared between the macOS host and the Linux container. Running `make install`
+    on macOS installed macOS-native Pillow wheels; the Linux container could not load
+    the `_imaging` C extension, causing every `GET /api/report/export-pdf` request to
+    return 500. Fix: added a `backend-venv` named volume scoped to `/app/.venv` so the
+    container venv is always Linux-native. After `docker compose down -v && make dev`
+    the issue is fully resolved. The `backend/tests/unit/test_pdf_render.py` smoke test
+    (M6 carry-over #4) guards against regression.
 
 7. **`test_tc_i_sh_6_manual_refresh_bypasses_cache`** — **Fixed in `fix/tc-i-sh-6-cache-flake`.**
    Root cause was (a): `SheetCache.invalidate()` only reset `_cached_at = 0.0`

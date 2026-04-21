@@ -58,6 +58,10 @@ Coverage targets:
 - TC-U-AUTHZ-3: Hub scoping filter with `["Sarajevo"]` filters at every aggregation stage, not only the final table.
 - TC-U-AUTHZ-4: Hub scoping filter does not mutate the original dataset.
 
+### 3.5 PDF rendering smoke test
+
+- TC-U-PDF-1: `html_to_pdf(render_pdf_html(report))` returns bytes whose first four bytes are `%PDF`. Skipped automatically on hosts where WeasyPrint's system libraries (libpango, libgobject, libcairo) are absent; runs green inside the Docker backend image. Guards against `ImportError: _imaging` regressions from shared-venv contamination (FR-REPORT-10).
+
 ### 3.4 Design system conformance
 
 - TC-U-BRAND-1: No component file under `frontend/src/` contains a hardcoded hex colour literal (e.g. `#6c69ff`). Enforced via a lint rule or a ripgrep test.
@@ -158,7 +162,7 @@ Each requirement in [prd.md](prd.md) maps to at least one test case:
 - FR-REPORT-1..7: TC-U-REP-1..9, TC-I-SH-1, TC-I-SH-3, TC-I-SH-6, TC-E-1, TC-E-7, TC-I-AUD-7.
 - FR-REPORT-8 (year selector): TC-U-REP-10, TC-I-API-1, TC-E-9.
 - FR-REPORT-9 (year-over-year): TC-U-REP-11, TC-U-REP-12, TC-I-API-8, TC-I-API-9, TC-E-10.
-- FR-REPORT-10 (PDF export): TC-I-API-7, TC-I-AUD-8, TC-E-11.
+- FR-REPORT-10 (PDF export): TC-U-PDF-1, TC-I-API-7, TC-I-AUD-8, TC-E-11.
 - FR-CONFIG-1..5: TC-U-MAP-1..5, TC-I-API-5, TC-I-API-12, TC-I-API-13, TC-E-6.
 - FR-COMMENT-1..4: TC-U-REP-5, TC-U-REP-13, TC-I-API-3, TC-E-5.
 - FR-USER-1..4: TC-I-API-2, TC-I-API-10, TC-I-API-11, TC-E-12.
