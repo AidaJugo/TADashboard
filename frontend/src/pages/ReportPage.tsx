@@ -36,12 +36,18 @@ import { ExportPdfButton } from "@/components/ExportPdfButton";
 import type { PeriodGroup } from "@/components/PeriodNav";
 
 // ---------------------------------------------------------------------------
-// Available years (2025 historical + 2026 current). FR-REPORT-8.
-// Updated each year by bumping this constant; no code change needed in M6+.
+// Available years. FR-REPORT-8 / PRD §5: "more years added as data lands".
+// Range is 2024 (earliest synthetic dataset) through the current calendar year.
+// A new year becomes selectable automatically on 1 Jan without a code change.
+// Selecting a year with no Sheet rows shows the FR-REPORT-6 empty state.
 // ---------------------------------------------------------------------------
 
 const CURRENT_YEAR = new Date().getFullYear();
-const AVAILABLE_YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR].filter((y) => y >= 2025);
+const FIRST_DATA_YEAR = 2024;
+const AVAILABLE_YEARS = Array.from(
+  { length: CURRENT_YEAR - FIRST_DATA_YEAR + 1 },
+  (_, i) => FIRST_DATA_YEAR + i,
+);
 
 // ---------------------------------------------------------------------------
 // Styles

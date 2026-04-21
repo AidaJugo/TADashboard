@@ -377,6 +377,33 @@ def test_tc_u_rep_10_year_selector_excludes_other_years() -> None:
     assert result_2025.kpis.total == 1
 
 
+def test_tc_u_rep_10_year_2024_rows_are_isolated() -> None:
+    """TC-U-REP-10: year=2024 aggregates only 2024 rows; 2025/2026 rows excluded.
+
+    The frontend year selector now includes 2024 (fix/year-selector-available-years).
+    This confirms the backend already handles year=2024 correctly — the year
+    filter in build_period_data is year-agnostic.
+    """
+    rows = [
+        make_row(year="2024", month="Jan"),
+        make_row(year="2024", month="Jan"),
+        make_row(year="2025", month="Jan"),
+        make_row(year="2026", month="Jan"),
+    ]
+    result_2024 = _run_period(rows, year=2024, period="Jan")
+    result_2025 = _run_period(rows, year=2025, period="Jan")
+    result_2026 = _run_period(rows, year=2026, period="Jan")
+
+    assert result_2024.kpis is not None
+    assert result_2024.kpis.total == 2  # only the two 2024 rows
+
+    assert result_2025.kpis is not None
+    assert result_2025.kpis.total == 1
+
+    assert result_2026.kpis is not None
+    assert result_2026.kpis.total == 1
+
+
 # ---------------------------------------------------------------------------
 # TC-U-REP-11: year-over-year comparison returns same period in previous year
 # ---------------------------------------------------------------------------
